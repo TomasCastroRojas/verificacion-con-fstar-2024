@@ -79,16 +79,20 @@ type hoare : (pre:cond) -> (p:stmt) -> (post:cond) -> Type u#1 =
     hoare pre p mid ->
     hoare mid q post ->
     hoare pre (Seq p q) post
-
-  // | H_If :
-  // | H_Assign :
-
+  | H_If :
+    #c:expr -> #t:stmt -> #e:stmt ->
+    #pre:cond -> #post:cond ->
+    hoare (fun s -> pre s /\ (eval_expr s c = 0)) t post ->
+    hoare (fun s -> pre s /\ (eval_expr s c <> 0)) e post ->
+    hoare pre (IfZ c t e) post
+  | H_Assign :
+    #x:var -> #e:expr -> #post:cond ->
+    hoare (fun s' -> post (override s' x (eval_expr s' e))) (Assign x e) post
   | H_While :
     #inv':cond -> #c:expr -> #b:stmt ->
     inv:cond ->
     hoare (fun s -> inv s /\ eval_expr s c == 0) b inv ->
-    hoare inv (While inv' c b) (fun s -> inv s /\ eval_expr s c =!= 0)
-
+    hoare inv (While inv' c b) (fun s -> inv s /\ eval_expr s c <> 0)
   | H_Weaken :
     #pre:cond -> #p:stmt -> #post:cond ->
     pre':cond -> post':cond ->
@@ -96,7 +100,6 @@ type hoare : (pre:cond) -> (p:stmt) -> (post:cond) -> Type u#1 =
     squash (forall x. pre' x ==> pre x) ->
     squash (forall x. post x ==> post' x) ->
     hoare pre' p post'
-
   | H_Pure :
     #pre:cond -> #p:stmt -> #post:cond ->
     pre0:prop ->
@@ -117,10 +120,27 @@ let r_while (#inv:cond) (#c:expr) (#b:stmt) (#s #s' : state)
   : runsto s (While inv c b) s'
 = admit()
 
-let hoare_ok (p:stmt) (pre:cond) (post:cond) (s0 s1 : state) (e_pf : runsto s0 p s1) (pf : hoare pre p post)
+let rec hoare_ok (p:stmt) (pre:cond) (post:cond) (s0 s1 : state) (e_pf : runsto s0 p s1) (pf : hoare pre p post)
   : Lemma (requires pre s0)
           (ensures  post s1)
-= admit()
+= match pf with
+  | H_Seq #p #q #pre #mid #post hpf hqf ->
+    let R_Seq #p #q #s0 #smid #s1 rp rq = e_pf in
+    hoare_ok p pre mid s0 smid rp hpf;
+    hoare_ok q mid post smid s1 rq hqf
+  | H_If ht he ->
+      (match e_pf with
+      | R_IfZ_False #c #t #e #s0 #s1 re cnzero ->
+        hoare_ok e (fun s -> pre s /\ (eval_expr s c <> 0)) post s0 s1 re he
+      | R_IfZ_True #c #t #e #so #s1 rt czero ->
+        hoare_ok t (fun s -> pre s /\ (eval_expr s c = 0)) post s0 s1 rt ht)
+  | H_While #inv' #c #b inv hoare_b ->
+    (match e_pf with
+    | R_While_True #inv #c #b #s0 #smid #s1 rb czero rwhile ->
+      hoare_ok b (fun s -> inv s /\ (eval_expr s c == 0)) inv s0 smid rb hoare_b;
+      hoare_ok (While inv' c b) inv (fun s -> inv s /\ (eval_expr s c <> 0)) smid s1 rwhile pf
+    | _ -> ())
+  | _ -> admit()
 
 type wp = cond -> cond
 
