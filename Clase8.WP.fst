@@ -124,21 +124,21 @@ let rec hoare_ok (p:stmt) (pre:cond) (post:cond) (s0 s1 : state) (e_pf : runsto 
   : Lemma (requires pre s0)
           (ensures  post s1)
 = match pf with
-  | H_Seq #p #q #pre #mid #post hpf hqf ->
+  | H_Seq #p #q #_ #mid #_ hpf hqf ->
     let R_Seq #p #q #s0 #smid #s1 rp rq = e_pf in
     hoare_ok p pre mid s0 smid rp hpf;
     hoare_ok q mid post smid s1 rq hqf
   | H_If ht he ->
       (match e_pf with
-      | R_IfZ_False #c #t #e #s0 #s1 re cnzero ->
+      | R_IfZ_False #c #t #e #_ #_ re _ ->
         hoare_ok e (fun s -> pre s /\ (eval_expr s c <> 0)) post s0 s1 re he
-      | R_IfZ_True #c #t #e #so #s1 rt czero ->
+      | R_IfZ_True #c #t #e #_ #_ rt _ ->
         hoare_ok t (fun s -> pre s /\ (eval_expr s c = 0)) post s0 s1 rt ht)
   | H_While #inv' #c #b inv hoare_b ->
     (match e_pf with
-    | R_While_True #inv #c #b #s0 #smid #s1 rb czero rwhile ->
+    | R_While_True #_ #c #b #_ #smid #_ rb _ rwhile ->
       hoare_ok b (fun s -> inv s /\ (eval_expr s c == 0)) inv s0 smid rb hoare_b;
-      hoare_ok (While inv' c b) inv (fun s -> inv s /\ (eval_expr s c <> 0)) smid s1 rwhile pf
+      hoare_ok p inv (fun s -> inv s /\ (eval_expr s c <> 0)) smid s1 rwhile pf
     | _ -> ())
   | _ -> admit()
 

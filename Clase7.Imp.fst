@@ -112,18 +112,18 @@ let rec hoare_ok (p:stmt) (pre:cond) (post:cond) (pf : hoare pre p post)
           (ensures  post s1)
 = match pf with
   | H_Seq #p #q #pre #mid #post hpf hqf ->
-    let R_Seq #p #q #s0 #smid #s1 rp rq = e_pf in
+    let R_Seq #p #q #_ #smid #_ rp rq = e_pf in
     hoare_ok p pre mid hpf s0 smid rp;
     hoare_ok q mid post hqf smid s1 rq
   | H_IfZ ht he ->
       (match e_pf with
-      | R_IfZ_False #c #t #e #s0 #s1 re cnzero ->
+      | R_IfZ_False #c #t #e #_ #_ re _ ->
         hoare_ok e (fun s -> pre s && (eval_expr s c <> 0)) post he s0 s1 re
-      | R_IfZ_True #c #t #e #so #s1 rt czero ->
+      | R_IfZ_True #c #t #e #_ #_ rt _ ->
         hoare_ok t (fun s -> pre s && (eval_expr s c = 0)) post ht s0 s1 rt)
   | H_While #c #b #inv hb ->
     (match e_pf with
-    | R_While_True #c #b #s0 #smid #s1 rb czero rw ->
+    | R_While_True #_ #_ #_ #smid #_ rb _ rw ->
       hoare_ok b (fun s -> inv s && (eval_expr s c = 0)) inv hb s0 smid rb;
       hoare_ok (While c b) inv (fun s -> inv s && (eval_expr s c <> 0)) pf smid s1 rw
     | _ -> ())
