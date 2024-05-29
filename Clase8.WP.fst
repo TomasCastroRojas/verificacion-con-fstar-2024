@@ -82,8 +82,8 @@ type hoare : (pre:cond) -> (p:stmt) -> (post:cond) -> Type u#1 =
   | H_If :
     #c:expr -> #t:stmt -> #e:stmt ->
     #pre:cond -> #post:cond ->
-    hoare (fun s -> pre s /\ (eval_expr s c = 0)) t post ->
-    hoare (fun s -> pre s /\ (eval_expr s c <> 0)) e post ->
+    hoare (fun s -> pre s /\ (eval_expr s c == 0)) t post ->
+    hoare (fun s -> pre s /\ (eval_expr s c =!= 0)) e post ->
     hoare pre (IfZ c t e) post
   | H_Assign :
     #x:var -> #e:expr -> #post:cond ->
@@ -92,7 +92,7 @@ type hoare : (pre:cond) -> (p:stmt) -> (post:cond) -> Type u#1 =
     #inv':cond -> #c:expr -> #b:stmt ->
     inv:cond ->
     hoare (fun s -> inv s /\ eval_expr s c == 0) b inv ->
-    hoare inv (While inv' c b) (fun s -> inv s /\ eval_expr s c <> 0)
+    hoare inv (While inv' c b) (fun s -> inv s /\ eval_expr s c =!= 0)
   | H_Weaken :
     #pre:cond -> #p:stmt -> #post:cond ->
     pre':cond -> post':cond ->
@@ -131,14 +131,14 @@ let rec hoare_ok (p:stmt) (pre:cond) (post:cond) (s0 s1 : state) (e_pf : runsto 
   | H_If ht he ->
       (match e_pf with
       | R_IfZ_False #c #t #e #_ #_ re _ ->
-        hoare_ok e (fun s -> pre s /\ (eval_expr s c <> 0)) post s0 s1 re he
+        hoare_ok e (fun s -> pre s /\ (eval_expr s c =!= 0)) post s0 s1 re he
       | R_IfZ_True #c #t #e #_ #_ rt _ ->
-        hoare_ok t (fun s -> pre s /\ (eval_expr s c = 0)) post s0 s1 rt ht)
+        hoare_ok t (fun s -> pre s /\ (eval_expr s c == 0)) post s0 s1 rt ht)
   | H_While #inv' #c #b inv hoare_b ->
     (match e_pf with
     | R_While_True #_ #c #b #_ #smid #_ rb _ rwhile ->
       hoare_ok b (fun s -> inv s /\ (eval_expr s c == 0)) inv s0 smid rb hoare_b;
-      hoare_ok p inv (fun s -> inv s /\ (eval_expr s c <> 0)) smid s1 rwhile pf
+      hoare_ok p inv (fun s -> inv s /\ (eval_expr s c =!= 0)) smid s1 rwhile pf
     | _ -> ())
   | _ -> admit()
 
