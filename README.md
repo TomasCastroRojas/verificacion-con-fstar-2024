@@ -1,3 +1,5 @@
+<a href='https://codespaces.new/mtzguido/verificacion-con-fstar-2024' target="_blank" rel="noreferrer noopener"><img src='https://github.com/codespaces/badge.svg' alt='Open in GitHub Codespaces' style='max-width: 100%;'></a>
+
 # Verificación de Programas con F\*
 
 Para instrucciones sobre cómo correr F* ver: [Ejecutar.md](./Ejecutar.md).
@@ -21,7 +23,7 @@ Para instrucciones sobre cómo usar la extensión, ver [aquí](https://github.co
 |  9 | 21/05 | Efectos en F\* y verificación, Mónadas de Dijkstra.
 | 10 | 28/05 | Pruebas calculacionales. Breve intro a tácticas y metaprogramación ([más material](https://fstar-lang.org/eci2019/))
 |    | 04/06 | Cancelada.
-| 11 | 11/06 | Invitada: Gabriel Ebner sobre Lean4 y Mathlib
+| 11 | 11/06 | Invitada: Gabriel Ebner sobre Lean4 y Mathlib. [Repositorio](https://github.com/gebner/vcf24-lean)
 | 12 | 18/06 | Consultas, cierre
 | -- | 25/06 | Consulta
 
@@ -70,3 +72,6 @@ Para instrucciones sobre cómo usar la extensión, ver [aquí](https://github.co
   - [sel4](https://sel4.systems/): microkernel
   - [DeepSpec](https://deepspec.org/main): especificaciones profundas full-stack
   - [Z3](https://www.microsoft.com/en-us/research/project/z3-3/): SMT solver ([GitHub](https://github.com/z3prover/z3))
+- Sobre Lean:
+  - [Kevin Buzzard - The Future of Mathematics?](https://www.youtube.com/watch?v=Dp-mQ3HxgDE)
+  - [Kevin Buzzard - What Computers Can't Do](https://www.youtube.com/watch?v=jQPb7DRMoZY)
