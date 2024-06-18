@@ -24,7 +24,7 @@ Para instrucciones sobre cómo usar la extensión, ver [aquí](https://github.co
 | 10 | 28/05 | Pruebas calculacionales. Breve intro a tácticas y metaprogramación ([más material](https://fstar-lang.org/eci2019/))
 |    | 04/06 | Cancelada.
 | 11 | 11/06 | Invitada: Gabriel Ebner sobre Lean4 y Mathlib. [Repositorio](https://github.com/gebner/vcf24-lean)
-| 12 | 18/06 | Consultas, cierre
+| 12 | 18/06 | Invitada: Jonathan Protzenko. (Archivos [aquí](https://mtzguido.github.io/teaching/vcf24/index.html))
 | -- | 25/06 | Consulta
 
 ## Bibliografía
@@ -38,6 +38,7 @@ Para instrucciones sobre cómo usar la extensión, ver [aquí](https://github.co
 
 - Métodos formales en la práctica
   - [Reid et al - Towards making formal methods normal: meeting developers where they are (2020)](https://arxiv.org/abs/2010.16345)
+  - [AWS re:Inforce 2024 - Proving the correctness of AWS authorization](https://www.youtube.com/watch?v=oshxAJGrwMU)
 - Bugs famosos
   - [Bug FDIV del Pentium](https://en.wikipedia.org/wiki/Pentium_FDIV_bug)
   - [Vuelo Arianne V88](https://en.wikipedia.org/wiki/Ariane_flight_V88)
