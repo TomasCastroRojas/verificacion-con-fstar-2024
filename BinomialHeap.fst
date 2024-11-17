@@ -2,11 +2,27 @@ module BinomialHeap
 
 open FStar.List.Tot
 
-type node = 
+type node0 = 
   | E 
-  | N of int & int & node & node & node // data, degre, child, sibling, parent
+  | N of int & int & node0 & node0 & node0 // data, degre, child, sibling, parent
 
-let mergeNode (b1: node)  (b2: node) : node =
+let rec min_heap (x: int) (n: node0) : bool =
+  match n with
+  | E -> true
+  | N (y, _, c, s, p) -> match p with
+                          | E -> y < x && min_heap x c
+                          | _ -> y < x && min_heap x c && min_heap x s
+
+let rec is_heap (n : node0) : bool =
+  match n with
+  | E -> true
+  | N (x, _, c, s, p) -> match p with
+                          | E -> is_heap c && min_heap x c
+                          | N (x',_,_,_,_) -> is_heap c && min_heap x c && is_heap s && min_heap x' s
+
+type node = n:node0{is_heap n}
+
+let mergeNode0 (b1: node0)  (b2: node0) : node0 =
   match b1, b2 with
   | E, E -> E
   | N (_,_,_,_,_), E -> b1
@@ -19,7 +35,7 @@ let mergeNode (b1: node)  (b2: node) : node =
        N (d2, deg2 + 1, b4, s2, p2)
 
 
-let rec unionBH' (l1: list node) (l2: list node) : list node =
+let rec unionBH' (l1: list node0) (l2: list node0) : list node0 =
   match l1, l2 with
   | [], [] -> []
   | l, [] -> l
@@ -32,7 +48,7 @@ let rec unionBH' (l1: list node) (l2: list node) : list node =
                         then n1 :: unionBH' l1' l2
                         else n2 :: unionBH' l1 l2'
 
-let rec adjust (l : list node) : Tot (list node) (decreases (length l)) =
+let rec adjust (l : list node0) : Tot (list node0) (decreases (length l)) =
   match l with
   | [] -> []
   | [x] -> l
@@ -41,29 +57,29 @@ let rec adjust (l : list node) : Tot (list node) (decreases (length l)) =
   | n1 :: (n2 :: l') -> let (N (_,d1,_,_,_)) = n1 in
                         let (N (_,d2,_,_,_)) = n2 in
                         if d1 = d2
-                        then adjust ((mergeNode n1 n2) :: l')
+                        then adjust ((mergeNode0 n1 n2) :: l')
                         else n1 :: adjust (n2 :: l')
 
-let union (l1: list node) (l2: list node) : list node =
+let union (l1: list node0) (l2: list node0) : list node0 =
   adjust (unionBH' l1 l2)
 
-let rec findMin (l: list node{Cons?  l}) : int =
+let rec findMin (l: list node0{Cons?  l}) : int =
   match l with
   | [E] -> 0
   | [N (d,_,_,_,_)] -> d
   | E :: l' -> findMin l'
   | N (d,_,_,_,_) :: l' -> min d (findMin l')
 
-let insert (x: int) (l: list node) : list node =
+let insert (x: int) (l: list node0) : list node0 =
   let n = N (x, 0, E, E, E) in
   union [n] l
 
-let rec fromChilds (x: node) : list node =
+let rec fromChilds (x: node0) : list node0 =
   match x with
   | E -> []
   | N (_,_,_,s,_) -> x :: fromChilds s
 
-let rec extracMin' (l: list node) (m: int): list node =
+let rec extracMin' (l: list node0) (m: int): list node0 =
   match l with
   | [] -> []
   | [E] -> []
@@ -74,11 +90,11 @@ let rec extracMin' (l: list node) (m: int): list node =
                then fromChilds c @ l'
                else x :: extracMin' l' m
 
-let extractMin (l: list node{Cons?  l}) : list node =
+let extractMin (l: list node0{Cons?  l}) : list node0 =
   let m = findMin l in
   adjust (extracMin' l m)
 
-let rec findKey (n: node) (k: int) : bool =
+let rec findKey (n: node0) (k: int) : bool =
   match n with
   | E -> false
   | N (x, _, c, s, _) -> x = k || findKey c k || findKey s k
@@ -88,7 +104,7 @@ let rec findKey (n: node) (k: int) : bool =
 // 5  6
 // 10
 // y llamo decreaseKeyNode (N 3) 6 2 ?
-let rec decreaseKeyNode (n: node) (k: int) (x: int): node =
+let rec decreaseKeyNode (n: node0) (k: int) (x: int): node0 =
   match n with
   | E -> E
   | N (d, deg, c, s, p) -> if d = k
@@ -100,7 +116,7 @@ let rec decreaseKeyNode (n: node) (k: int) (x: int): node =
                                                                then N (d', deg, N (d, deg', c'',s', p'), s, p)
                                                                else N (d, deg, c', s, p)
                                 
-let rec decreaseKey (l: list node) (k: int) (x: int) : list node =
+let rec decreaseKey (l: list node0) (k: int) (x: int) : list node0 =
   match l with
   | [] -> []
   | n::l' -> if findKey n k
