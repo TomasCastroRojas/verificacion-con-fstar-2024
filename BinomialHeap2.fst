@@ -20,9 +20,9 @@ let singleton (x: int): node0 = N (0, x, [])
 
 let link (tree1 : node0) (tree2 : node0{rank tree2 = rank tree1}) : node0 =
   match tree1, tree2 with
-  | N (r1, k1, c1), N (r2, k2, c2) -> if k1 <= k2
-                                      then N (r1 + 1, k1, tree2 :: c1)
-                                      else N (r2 + 1, k2, tree1 :: c2)
+  | N (r, k1, c1), N (_, k2, c2) -> if k1 <= k2
+                                    then N (r + 1, k1, tree2 :: c1)
+                                    else N (r + 1, k2, tree1 :: c2)
 
 let rec all_nodes (f: node0 -> bool) (l: list node0) : bool =
   match l with
@@ -68,15 +68,15 @@ let rec merge (bh1: heap) (bh2: heap) : heap =
   | _, [] -> bh1
   | h1::hs1, h2::hs2 -> if rank h1 < rank h2
                         then h1 :: merge hs1 bh2
-                        else if rank h1 = rank h2
-                              then insertTree (link h1 h2) (merge hs1 hs2)
-                              else h2 :: merge bh1 hs2
+                        else if rank h1 > rank h2
+                             then h2 :: merge bh1 hs2
+                             else insertTree (link h1 h2) (merge hs1 hs2)
 
 let rec removeMinTree (bh: heap{Cons? bh}) : node0 & heap =
   match bh with
   | [h] -> (h, [])
   | h::hs -> let m, hs' = removeMinTree hs in
-             if root h <= root m
+             if root h < root m
              then (h, hs)
              else (m, h::hs')
 
