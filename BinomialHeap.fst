@@ -2,123 +2,97 @@ module BinomialHeap
 
 open FStar.List.Tot
 
-type node0 = 
-  | E 
-  | N of int & int & node0 & node0 & node0 // data, degre, child, sibling, parent
+type node0 = | N of int & int & list node0 // rank, data, children
 
-let rec min_heap (x: int) (n: node0) : bool =
-  match n with
-  | E -> true
-  | N (y, _, c, s, p) -> match p with
-                          | E -> y < x && min_heap x c
-                          | _ -> y < x && min_heap x c && min_heap x s
+let rank (tree : node0) : int =
+  let N (r,_,_) = tree in
+  r
 
-let rec is_heap (n : node0) : bool =
-  match n with
-  | E -> true
-  | N (x, _, c, s, p) -> match p with
-                          | E -> is_heap c && min_heap x c
-                          | N (x',_,_,_,_) -> is_heap c && min_heap x c && is_heap s && min_heap x' s
+let root (tree : node0) : int =
+  let N (_,r,_) = tree in
+  r
 
-type node = n:node0{is_heap n}
+let children (tree : node0) : list node0 =
+  let N (_,_,c) = tree in
+  c
 
-let mergeNode0 (b1: node0)  (b2: node0) : node0 =
-  match b1, b2 with
-  | E, E -> E
-  | N (_,_,_,_,_), E -> b1
-  | E, N (_,_,_,_,_) -> b2
-  | N (d1, deg1, c1, s1, p1), N (d2, deg2, c2, s2, p2) ->
-  if d1 < d2 
-  then let b3 = N (d2, deg2, c2, c1, b1) in
-       N (d1, deg1 + 1, b3, s1, p1)
-  else let b4 = N (d1, deg1, c1, c2, b2) in
-       N (d2, deg2 + 1, b4, s2, p2)
+let singleton (x: int): node0 = N (0, x, [])
 
+let link (tree1 : node0) (tree2 : node0{rank tree2 = rank tree1}) : node0 =
+  match tree1, tree2 with
+  | N (r, k1, c1), N (_, k2, c2) -> if k1 <= k2
+                                    then N (r + 1, k1, tree2 :: c1)
+                                    else N (r + 1, k2, tree1 :: c2)
 
-let rec unionBH' (l1: list node0) (l2: list node0) : list node0 =
-  match l1, l2 with
-  | [], [] -> []
-  | l, [] -> l
-  | [], l -> l
-  | E :: l1', _ -> unionBH' l1' l2
-  | _, E :: l2' -> unionBH' l1 l2'
-  | n1::l1', n2::l2' -> let (N (_,d1,_,_,_)) = n1 in
-                        let (N (_,d2,_,_,_)) = n2 in
-                        if d1 <= d2
-                        then n1 :: unionBH' l1' l2
-                        else n2 :: unionBH' l1 l2'
-
-let rec adjust (l : list node0) : Tot (list node0) (decreases (length l)) =
+let rec all_nodes (bound : 'a) (f: (x:node0{x << bound}) -> bool) (l : list node0{l << bound}) : bool =
   match l with
-  | [] -> []
-  | [x] -> l
-  | E :: l' -> adjust l'
-  | x :: (E :: l') -> adjust (x::l')
-  | n1 :: (n2 :: l') -> let (N (_,d1,_,_,_)) = n1 in
-                        let (N (_,d2,_,_,_)) = n2 in
-                        if d1 = d2
-                        then adjust ((mergeNode0 n1 n2) :: l')
-                        else n1 :: adjust (n2 :: l')
+  | [] -> true
+  | x::xs' -> f x && all_nodes bound f xs'
 
-let union (l1: list node0) (l2: list node0) : list node0 =
-  adjust (unionBH' l1 l2)
+let rec all_le (x: int) (tree: node0) : bool =
+  match tree with
+  | N (r, k, c) -> k <= x && all_nodes tree (all_le x) c
 
-let rec findMin (l: list node0{Cons?  l}) : int =
-  match l with
-  | [E] -> 0
-  | [N (d,_,_,_,_)] -> d
-  | E :: l' -> findMin l'
-  | N (d,_,_,_,_) :: l' -> min d (findMin l')
+let rec is_heap (tree: node0) : bool =
+  match tree with
+  | N (r, k, c) -> all_le k tree && all_nodes tree is_heap c
 
-let insert (x: int) (l: list node0) : list node0 =
-  let n = N (x, 0, E, E, E) in
-  union [n] l
+let rec incr_rank (hs : list node0) : prop =
+  match hs with
+  | [] -> True
+  | [_] -> True
+  | h1::h2::hs' -> rank h1 < rank h2 /\ incr_rank (h2::hs')
 
-let rec fromChilds (x: node0) : list node0 =
-  match x with
-  | E -> []
-  | N (_,_,_,s,_) -> x :: fromChilds s
+type heap = list node0
 
-let rec extracMin' (l: list node0) (m: int): list node0 =
-  match l with
-  | [] -> []
-  | [E] -> []
-  | [N (_,_,c,_,_)] -> fromChilds c
-  | E :: l' -> extracMin' l' m
-  | x :: l' -> let N (d,_,c,_,_) = x in
-               if d = m
-               then fromChilds c @ l'
-               else x :: extracMin' l' m
+let emptyHeap : heap = []
 
-let extractMin (l: list node0{Cons?  l}) : list node0 =
-  let m = findMin l in
-  adjust (extracMin' l m)
+let isEmptyHeap (h: heap) : bool =
+  match h with
+  | [] -> true
+  | _ -> false
 
-let rec findKey (n: node0) (k: int) : bool =
-  match n with
-  | E -> false
-  | N (x, _, c, s, _) -> x = k || findKey c k || findKey s k
+let rec insertTree (t: node0) (bh: heap) : Tot heap (decreases (length bh))=
+  match bh with
+  | [] -> [t]
+  | h::hs -> if rank t < rank h
+             then t::bh
+             else if rank t = rank h
+                  then insertTree (link t h) hs
+                  else h :: insertTree t hs
 
-// Busqueda en el hermano?
-//    3
-// 5  6
-// 10
-// y llamo decreaseKeyNode (N 3) 6 2 ?
-let rec decreaseKeyNode (n: node0) (k: int) (x: int): node0 =
-  match n with
-  | E -> E
-  | N (d, deg, c, s, p) -> if d = k
-                           then N (x, deg, c, s, p)
-                           else let c' = decreaseKeyNode c k x in
-                                match c' with
-                                | E -> n
-                                | N (d', deg', c'', s', p') -> if d' <= d
-                                                               then N (d', deg, N (d, deg', c'',s', p'), s, p)
-                                                               else N (d, deg, c', s, p)
-                                
-let rec decreaseKey (l: list node0) (k: int) (x: int) : list node0 =
-  match l with
-  | [] -> []
-  | n::l' -> if findKey n k
-             then decreaseKeyNode n k x :: l'
-             else n :: decreaseKey l' k x
+let insert (x: int) (h: heap) : heap =
+  insertTree (singleton x) h
+
+let rec merge (bh1: heap) (bh2: heap) : heap =
+  match bh1, bh2 with
+  | [], _ -> bh2
+  | _, [] -> bh1
+  | h1::hs1, h2::hs2 -> if rank h1 < rank h2
+                        then h1 :: merge hs1 bh2
+                        else if rank h1 > rank h2
+                             then h2 :: merge bh1 hs2
+                             else insertTree (link h1 h2) (merge hs1 hs2)
+
+let rec removeMinTree (bh: heap{Cons? bh}) : node0 & heap =
+  match bh with
+  | [h] -> (h, [])
+  | h::hs -> let m, hs' = removeMinTree hs in
+             if root h < root m
+             then (h, hs)
+             else (m, h::hs')
+
+let findMin (bh: heap{Cons? bh}) : int =
+  let m, _ = removeMinTree bh in root m
+
+let rev (#a:Type) (xs : list a) : list a =
+  let rec go (acc xs : list a) : Tot (list a) (decreases xs)=
+    match xs with
+    | [] -> acc
+    | x::xs -> go (x::acc) xs
+  in
+  go [] xs
+
+let deleteMin (bh: heap{Cons? bh}) : heap =
+  let m, hs = removeMinTree bh in
+  merge (rev (children m)) hs
