@@ -20,7 +20,7 @@ let children (tree : node0) : list node0 =
 
 let singleton (x: int): node0 = N (0, x, [])
 
-let link (tree1 : node0) (tree2 : node0{rank tree2 = rank tree1}) : node0 =
+let link (tree1 tree2 : node0) : node0 =
   match tree1, tree2 with
   | N (r, k1, c1), N (_, k2, c2) -> if k1 <= k2
                                     then N (r + 1, k1, tree2 :: c1)
@@ -100,16 +100,6 @@ let rec removeMinTree (bh: bheap{Cons? bh}) : (node0 & bheap)  =
              then (h, hs)
              else (m, h::hs')
 
-// let lemma_removeMinTree (bh : bheap{Cons? bh})
-//   : Lemma (let (t, bh') = removeMinTree bh in
-//            is_perm (t :: bh') bh)
-//   = ...
-
-let rec lemma_removeMinTree_size (bh : bheap{Cons? bh})
-  : Lemma (number_nodes bh == number_nodes (snd (removeMinTree bh)) + number_nodes0 (fst (removeMinTree bh)))
-  = match bh with
-    | [h] -> ()
-    | h::hs -> lemma_removeMinTree_size hs
 
 let findMin (bh: bheap{Cons? bh}) : int =
   let m, _ = removeMinTree bh in root m
@@ -126,19 +116,53 @@ let extractMin (bh: bheap{Cons? bh}) : int & bheap =
   let m, hs = removeMinTree bh in
   root m, merge (rev (children m)) hs
 
+let rec lemma_removeMinTree_size (bh : bheap{Cons? bh})
+  : Lemma (number_nodes bh == number_nodes (snd (removeMinTree bh)) + number_nodes0 (fst (removeMinTree bh)))
+  = 
+    match bh with
+    | [h] -> ()
+    | h::hs -> lemma_removeMinTree_size hs
+
 let rec lemma_rev_go_number_nodes (acc ts : list node0)
   : Lemma (ensures number_nodes acc + number_nodes ts == number_nodes (rev_go acc ts))
           (decreases ts)
-  =  match ts with
+  =  
+    match ts with
      | [] -> ()
      | t::ts -> lemma_rev_go_number_nodes (t::acc) ts
 
 let lemma_rev_number_nodes (ts : list node0)
   : Lemma (number_nodes ts == number_nodes (rev ts))
-          [SMTPat (number_nodes (rev ts))]
   = lemma_rev_go_number_nodes [] ts
 
-let deleteMin_size (bh: bheap{Cons? bh})
+let rec lemma_insertTree_size (tree: node0) (bh: bheap)
+  : Lemma (ensures number_nodes (insertTree tree bh) == number_nodes0 tree + number_nodes bh)
+          (decreases bh)
+  = 
+    match bh with
+    | [] -> ()
+    | h::hs -> if rank tree < rank h
+               then ()
+               else if rank tree = rank h
+                    then lemma_insertTree_size (link tree h) hs
+                    else lemma_insertTree_size tree hs
+
+let rec lemma_merge_size (bh1 bh2: bheap)
+  : Lemma (number_nodes (merge bh1 bh2) == number_nodes bh1 + number_nodes bh2)
+  = 
+    match bh1, bh2 with
+    | [], _ -> ()
+    | _, [] -> ()
+    | h1::hs1, h2::hs2 -> if rank h1 < rank h2
+                          then lemma_merge_size hs1 bh2
+                          else if rank h1 > rank h2
+                               then lemma_merge_size bh1 hs2
+                               else (
+                                     lemma_insertTree_size (link h1 h2) (merge hs1 hs2); 
+                                     lemma_merge_size hs1 hs2
+                                    )
+
+let lemma_deleteMin_size (bh: bheap{Cons? bh})
   : Lemma (number_nodes (snd (extractMin bh)) == number_nodes bh - 1)
 = 
   let m, hs = removeMinTree bh in
@@ -146,14 +170,10 @@ let deleteMin_size (bh: bheap{Cons? bh})
     number_nodes (snd (extractMin bh));
     == {}
     number_nodes (merge (rev (children m)) hs);
-    == { admit() } (* demostrar que size(merge a b) = size a + size b *)
+    == { lemma_merge_size (rev (children m)) hs } 
     number_nodes (rev (children m)) + number_nodes hs;
-    // == { } // lemma_rev_number_nodes (children m) }
-    // number_nodes (children m) + number_nodes hs;
-    // == { } // children_size m }
-    // (number_nodes0 m - 1) + number_nodes hs;
-    // == {}
-    // (number_nodes0 m + number_nodes hs) - 1;
+    == {lemma_rev_number_nodes (children m) } 
+    number_nodes (children m) + number_nodes hs;
     == { lemma_removeMinTree_size bh }
     number_nodes bh - 1;
   }
@@ -162,21 +182,25 @@ let rec toList (bh: bheap) : Tot (list int) (decreases (number_nodes bh))=
   match bh with
     | [] -> []
     | _ -> let m, bh' = extractMin bh in
-           deleteMin_size bh;
+           lemma_deleteMin_size bh;
            m :: toList bh'
-
-let models (bh : bheap) (xs : list int) : prop =
-  toList bh == xs
-
-// val insert_ok (x:int) (bh : bheap) (xs : list int)
-//   : Lemma (requires models bh xs)
-//           (ensures models (insert x bh) (x :: xs))
-
-// val peek_ok (bh : bheap) (x:int) (xs : list int)
-//   : Lemma (requires models bh (x::xs))
-//           (ensures peek bh == x)
 
 let rec fromList (l: list int) : bheap =
   match l with
     | [] -> []
     | x::xs -> insert x (fromList xs)
+
+let models (bh : bheap) (xs : list int) : prop =
+  toList bh == xs
+
+val insert_ok  (bh : bheap) (x : int) (xs : list int)
+  : Lemma (requires models bh xs)
+          (ensures models (insert x bh) (x :: xs))
+
+val findMin_ok (bh : bheap) (x : int) (xs : list int)
+  : Lemma (requires models bh (x::xs))
+          (ensures findMin bh == x)
+
+val deleteMin_ok (bh : bheap) (x : int) (xs : list int)
+  : Lemma (requires models bh (x::xs))
+          (ensures models (snd (extractMin bh)) xs)
