@@ -3,6 +3,7 @@ module BinomialHeap
 open FStar.List.Tot
 open FStar.Math.Lib
 open FStar.Calc
+open InsertionSort
 
 type node0 = | N of nat & int & list node0 // rank, data, children
 
@@ -195,7 +196,7 @@ let models (bh : bheap) (xs : list int) : prop =
 
 val insert_ok  (bh : bheap) (x : int) (xs : list int)
   : Lemma (requires models bh xs)
-          (ensures models (insert x bh) (x :: xs))
+          (ensures models (insert x bh) (insertion_sort (<) (x :: xs)))
 
 val findMin_ok (bh : bheap) (x : int) (xs : list int)
   : Lemma (requires models bh (x::xs))
@@ -204,3 +205,11 @@ val findMin_ok (bh : bheap) (x : int) (xs : list int)
 val deleteMin_ok (bh : bheap) (x : int) (xs : list int)
   : Lemma (requires models bh (x::xs))
           (ensures models (snd (extractMin bh)) xs)
+
+let findMin_ok (bh : bheap) (x : int) (xs : list int)
+  : Lemma (requires models bh (x::xs))
+          (ensures findMin bh == x) = ()
+
+let deleteMin_ok (bh : bheap) (x : int) (xs : list int)
+  : Lemma (requires models bh (x::xs))
+          (ensures models (snd (extractMin bh)) xs) = ()
