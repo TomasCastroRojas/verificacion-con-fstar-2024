@@ -152,7 +152,8 @@ let rec children (n: node) : Tot (list node) (decreases (number_nodes0 n))
 let extractMin (bh: bheap{Cons? bh}) : int & bheap =
   let m, hs = removeMinTree bh in 
   root0 m, merge (rev (children m)) hs
-
+  
+(*
 let rec lemma_removeMinTree_size (bh : bheap{Cons? bh})
   : Lemma (number_nodes bh == number_nodes (snd (removeMinTree bh)) + number_nodes0 (fst (removeMinTree bh)))
   = 
@@ -221,7 +222,7 @@ let rec toList (bh: bheap) : Tot (list int) (decreases (number_nodes bh))=
     | _ -> let m, bh' = extractMin bh in
            lemma_deleteMin_size bh;
            m :: toList bh'
-
+*)
 let rec elems_node0 (n: node0) : list int =
   let N (x, _, c) = n in
   x :: elems_nodes c
@@ -230,7 +231,7 @@ and elems_nodes (cs: list node0) : list int =
     | [] -> []
     | c::cs' -> elems_node0 c @ elems_nodes cs'
 
-let rec toList2 (bh: bheap) : Tot (list int) (decreases (number_nodes bh))=
+let rec toList2 (bh: bheap) : Tot (list int)=
   match bh with
     | [] -> []
     | h::hs -> elems_node0 h @ toList2 hs 
@@ -240,31 +241,28 @@ let rec fromList (l: list int) : bheap =
     | [] -> []
     | x::xs -> insert x (fromList xs)
 
+(*
 let models (bh : bheap) (xs : list int) : prop =
   toList bh == xs
+*)
 
-let models2 (bh : bheap) (xs : list int) : prop =
+let models (bh : bheap) (xs : list int) : prop =
   perm (toList2 bh) xs
 
-val findMin_ok (bh : bheap) (x : int) (xs : list int)
-  : Lemma (requires models bh (x::xs))
-          (ensures findMin bh == x)
+assume val min_list (xs: list int) : int
+assume val remove_list (x: int) (xs: list int) : list int
 
-val deleteMin_ok (bh : bheap) (x : int) (xs : list int)
-  : Lemma (requires models bh (x::xs))
-          (ensures models (snd (extractMin bh)) xs)
-
-let findMin_ok (bh : bheap) (x : int) (xs : list int)
+val findMin_ok (bh : bheap) (xs : list int{Cons? xs})
   : Lemma (requires models bh xs)
-          (ensures findMin bh == findMin_list xs) = ()
+          (ensures findMin bh == min_list xs)
 
-let deleteMin_ok (bh : bheap) (x : int) (xs : list int)
-  : Lemma (requires models bh (x::xs))
-          (ensures models (snd (extractMin bh)) xs) = ()
+val deleteMin_ok (bh : bheap) (xs : list int{Cons? xs})
+  : Lemma (requires models bh xs)
+          (ensures models (snd (extractMin bh)) (remove_list (min_list xs) xs))
 
 val insert_ok  (bh : bheap) (x : int) (xs : list int)
   : Lemma (requires models bh xs)
-          (ensures models (insert x bh) (InsertionSort.insert (<=) x xs))
+          (ensures models (insert x bh) (x::xs))
 
 assume val merge_sort (xs ys: list int) : list int
 
@@ -272,12 +270,15 @@ assume val merge_ok (bh1 bh2: bheap) (xs ys: list int)
   : Lemma (requires models bh1 xs /\ models bh2 ys)
           (ensures models (merge bh1 bh2) (merge_sort xs ys))
 
+(*
 let insert_ok  (bh : bheap) (x : int) (xs : list int)
   : Lemma (requires models bh xs)
-          (ensures models (insert x bh) (insertion_sort (<=) (x :: xs)))
+          (ensures models (insert x bh) (insertion_sort  (x :: xs)))
 = assert([singleton x] `models` [x]); 
   merge_ok [singleton x] bh [x] xs; 
   assert (merge [singleton x] bh `models` (merge_sort [x] xs));
   assert (insert x bh `models` (merge_sort [x] xs));
-  assert (insert x bh `models` (InsertionSort.insert (<=) x xs));
+  assert (insert x bh `models` (InsertionSort.insert x xs));
   admit()
+
+*)
