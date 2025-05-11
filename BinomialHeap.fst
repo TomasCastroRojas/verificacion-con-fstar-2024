@@ -86,11 +86,20 @@ let rec incr_rank (hs : list node0) : prop =
 
 let rec number_nodes0 (tree: node0) : nat =
   match tree with
-  | N (_, _, c) -> 1 + number_nodes c
-and number_nodes (bh: list node0) : nat = 
+  | N (_, _, c) -> 1 + number_nodes0_list c
+and number_nodes0_list (bh: list node0) : nat = 
   match bh with
     | [] -> 0
-    | h::hs -> number_nodes0 h + number_nodes hs
+    | h::hs -> number_nodes0 h + number_nodes0_list hs
+
+let number_nodes (tree: node) : nat = number_nodes0 tree
+
+let rec list_node_to_node0 (l: list node) : list node0 =
+  match l with
+    | [] -> []
+    | n::ns -> n :: list_node_to_node0 ns
+
+let number_nodes_list (l: list node) : nat = number_nodes0_list (list_node_to_node0 l)
 
 type bheap = list node
 
@@ -143,7 +152,7 @@ let rec rev_go #a (acc xs : list a) : Tot (list a) (decreases xs)=
 let rev (#a:Type) (xs : list a) : list a =
   rev_go [] xs
 
-let rec children (n: node) : Tot (list node) (decreases (number_nodes0 n))
+let rec children (n: node) : Tot (list node) (decreases (length (children0 n)))
 = 
   match n with
     | N (_,_,[]) -> []
@@ -153,28 +162,28 @@ let extractMin (bh: bheap{Cons? bh}) : int & bheap =
   let m, hs = removeMinTree bh in 
   root0 m, merge (rev (children m)) hs
   
-(*
+
 let rec lemma_removeMinTree_size (bh : bheap{Cons? bh})
-  : Lemma (number_nodes bh == number_nodes (snd (removeMinTree bh)) + number_nodes0 (fst (removeMinTree bh)))
+  : Lemma (number_nodes_list bh == number_nodes_list (snd (removeMinTree bh)) + number_nodes (fst (removeMinTree bh)))
   = 
     match bh with
     | [h] -> ()
     | h::hs -> lemma_removeMinTree_size hs
 
-let rec lemma_rev_go_number_nodes (acc ts : list node0)
-  : Lemma (ensures number_nodes acc + number_nodes ts == number_nodes (rev_go acc ts))
+let rec lemma_rev_go_number_nodes (acc ts : list node)
+  : Lemma (ensures number_nodes_list acc + number_nodes_list ts == number_nodes_list (rev_go acc ts))
           (decreases ts)
   =  
     match ts with
      | [] -> ()
      | t::ts -> lemma_rev_go_number_nodes (t::acc) ts
 
-let lemma_rev_number_nodes (ts : list node0)
-  : Lemma (number_nodes ts == number_nodes (rev ts))
+let lemma_rev_number_nodes (ts : list node)
+  : Lemma (number_nodes_list ts == number_nodes_list (rev ts))
   = lemma_rev_go_number_nodes [] ts
 
-let rec lemma_insertTree_size (tree: node0) (bh: bheap)
-  : Lemma (ensures number_nodes (insertTree tree bh) == number_nodes0 tree + number_nodes bh)
+let rec lemma_insertTree_size (tree: node) (bh: bheap)
+  : Lemma (ensures number_nodes_list (insertTree tree bh) == number_nodes tree + number_nodes_list bh)
           (decreases bh)
   = 
     match bh with
@@ -186,7 +195,7 @@ let rec lemma_insertTree_size (tree: node0) (bh: bheap)
                     else lemma_insertTree_size tree hs
 
 let rec lemma_merge_size (bh1 bh2: bheap)
-  : Lemma (number_nodes (merge bh1 bh2) == number_nodes bh1 + number_nodes bh2)
+  : Lemma (number_nodes_list (merge bh1 bh2) == number_nodes_list bh1 + number_nodes_list bh2)
   = 
     match bh1, bh2 with
     | [], _ -> ()
@@ -200,29 +209,32 @@ let rec lemma_merge_size (bh1 bh2: bheap)
                                      lemma_merge_size hs1 hs2
                                     )
 
+let lemma_size_children (n: node)
+  : Lemma (number_nodes n == number_nodes_list (children n) - 1) = admit()
+
 let lemma_deleteMin_size (bh: bheap{Cons? bh})
-  : Lemma (number_nodes (snd (extractMin bh)) == number_nodes bh - 1)
+  : Lemma (number_nodes_list (snd (extractMin bh)) == number_nodes_list bh - 1)
 = 
   let m, hs = removeMinTree bh in
   calc (==) {
-    number_nodes (snd (extractMin bh));
+    number_nodes_list (snd (extractMin bh));
     == {}
-    number_nodes (merge (rev (children m)) hs);
+    number_nodes_list (merge (rev (children m)) hs);
     == { lemma_merge_size (rev (children m)) hs } 
-    number_nodes (rev (children m)) + number_nodes hs;
+    number_nodes_list (rev (children m)) + number_nodes_list hs;
     == {lemma_rev_number_nodes (children m) } 
-    number_nodes (children m) + number_nodes hs;
+    number_nodes_list (children m) + number_nodes_list hs;
     == { lemma_removeMinTree_size bh }
-    number_nodes bh - 1;
+    number_nodes_list bh - 1;
   }
 
-let rec toList (bh: bheap) : Tot (list int) (decreases (number_nodes bh))=
+let rec toList (bh: bheap) : Tot (list int) (decreases (number_nodes_list bh))=
   match bh with
     | [] -> []
     | _ -> let m, bh' = extractMin bh in
            lemma_deleteMin_size bh;
            m :: toList bh'
-*)
+
 let rec elems_node0 (n: node0) : list int =
   let N (x, _, c) = n in
   x :: elems_nodes c
