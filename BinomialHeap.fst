@@ -45,38 +45,8 @@ let link0 (tree1 : node0) (tree2 : node0{rank0 tree1 = rank0 tree2}) : node0 =
                                     then N (r + 1, k1, tree2 :: c1)
                                     else N (r + 1, k2, tree1 :: c2)
 
-let link0_all_le (x: int) (tree1 : node0) (tree2 : node0{rank0 tree1 = rank0 tree2}) :
-  Lemma (requires all_le0 x tree1 /\ all_le0 x tree2)
-        (ensures all_le0 x (link0 tree1 tree2))
-= ()
-
-let append_is_heap (tree1 : node0) (tree2 : node0{rank0 tree1 = rank0 tree2}) : 
-  Lemma (requires is_heap0 tree1 /\ is_heap0 tree2)
-        (ensures is_heap (tree2::(children0 tree1)))
-= ()
-  
-let is_heap0_all_le0 (tree1 tree2: node0) : 
-  Lemma (requires is_heap0 tree1 /\ is_heap0 tree2 /\ root0 tree1 <= root0 tree2)
-        (ensures all_le0 (root0 tree1) tree2)
-= ()
-let link0_is_heap0 (tree1 : node0) (tree2 : node0{rank0 tree1 = rank0 tree2}) : 
-  Lemma (requires is_heap0 tree1 /\ is_heap0 tree2)
-        (ensures is_heap0 (link0 tree1 tree2))
-= match tree1, tree2 with
-  | N (r, k1, c1), N (_, k2, c2) -> if k1 <= k2
-                                    then (
-                                      assert(is_heap (tree2::c1));
-                                      assert(all_le0 k1 tree2)
-                                    )
-                                    else (
-                                      assert(is_heap (tree1::c2));
-                                      assert(all_le0 k2 tree1)
-                                    )
-
 let link (tree1 : node) (tree2 : node{rank0 tree1 = rank0 tree2}) : node 
-=
-  link0_is_heap0 tree1 tree2;
-  link0 tree1 tree2
+= link0 tree1 tree2
 
 let rec incr_rank (hs : list node0) : prop =
   match hs with
