@@ -282,55 +282,55 @@ let rec min_list xs =
   | [x] -> x
   | x::xs -> min x (min_list xs)
 
-val min_in_list (xs: list int { length xs > 0 }) :
+val lemma_min_in_list (xs: list int { length xs > 0 }) :
   Lemma (ensures mem (min_list xs) xs)
 
-let rec min_in_list xs =
+let rec lemma_min_in_list xs =
   match xs with
   | [x] -> ()
   | x::xs' ->
-    min_in_list xs'
+    lemma_min_in_list xs'
 
-let rec count_mem (l:list int) : Lemma
+let rec lemma_count_mem (l:list int) : Lemma
   (ensures forall x. mem x l <==> count x l > 0)
 =
   match l with
   | [] -> ()
   | y::ys ->
-    count_mem ys
+    lemma_count_mem ys
 
-val perm_mem : xs:list int -> ys:list int ->
+val lemma_perm_mem : xs:list int -> ys:list int ->
   Lemma (requires perm xs ys)
         (ensures forall x. mem x xs <==> mem x ys)
 
-let perm_mem xs ys =
-  count_mem xs;
-  count_mem ys
+let lemma_perm_mem xs ys =
+  lemma_count_mem xs;
+  lemma_count_mem ys
 
-let rec min_is_le_all (xs: list int { length xs > 0 }) : Lemma
+let rec lemma_min_is_le_all (xs: list int { length xs > 0 }) : Lemma
   (ensures forall y. mem y xs ==> min_list xs <= y)
 =
   match xs with
   | [x] -> () 
-  | x::xs' -> min_is_le_all xs'
+  | x::xs' -> lemma_min_is_le_all xs'
 
-val min_list_perm (xs : list int{Cons? xs}) (ys : list int)
+val lemma_min_list_perm (xs : list int{Cons? xs}) (ys : list int)
   : Lemma (requires xs =~ ys)
           (ensures min_list xs == min_list ys)
-let min_list_perm xs ys =
-  perm_mem xs ys;
-  min_in_list xs;
-  min_in_list ys;
-  min_is_le_all xs;
-  min_is_le_all ys
+let lemma_min_list_perm xs ys =
+  lemma_perm_mem xs ys;
+  lemma_min_in_list xs;
+  lemma_min_in_list ys;
+  lemma_min_is_le_all xs;
+  lemma_min_is_le_all ys
   
 
-let rec min_list_concat (xs ys : clist int)
+let rec lemma_min_list_concat (xs ys : clist int)
   : Lemma (ensures min_list (xs @ ys) == min_list xs `min` min_list ys) (decreases (length (xs@ys)))
   = 
   match xs with
     | [x] -> ()
-    | x::xs' -> min_list_concat xs' ys
+    | x::xs' -> lemma_min_list_concat xs' ys
 
 let rec lemma_toList_perm (bh: bheap{Cons? bh})
   : Lemma (let minh, rest = removeMinTree bh in toList bh =~ elems_node0 minh @ toList rest) 
@@ -358,11 +358,11 @@ let findMin_ok bh xs =
   assume (Cons? rest); // hmm....
   calc (==) {
     min_list xs;
-    == { min_list_perm (toList bh) xs }
+    == { lemma_min_list_perm (toList bh) xs }
     min_list (toList bh);
     == { lemma_toList_perm bh;
-         min_list_perm (toList bh) (elems_node0 minh @ toList rest);
-         min_list_concat (elems_node0 minh) (toList rest)
+         lemma_min_list_perm (toList bh) (elems_node0 minh @ toList rest);
+         lemma_min_list_concat (elems_node0 minh) (toList rest)
        }
     min_list (elems_node0 minh) `min` min_list (toList rest);
     == { lemma_minheap_gt_rest bh }
