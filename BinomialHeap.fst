@@ -3,8 +3,10 @@ module BinomialHeap
 open FStar.List.Tot
 open FStar.Math.Lib
 open FStar.Calc
-open InsertionSort
 
+(*
+  Definición de la estructura de arboles generales y los predicados de heap.
+*)
 type node0 = | N of nat & int & list node0 // rank, data, children
 
 let rec all_le0 (x: int) (tree: node0) : Tot bool (decreases %[tree; 0])=
@@ -37,6 +39,10 @@ let children0 (tree : node0) : list node0 =
 
 type node = n:node0{is_heap0 n}
 
+
+(*
+  Definición de operaciones de nodos
+*)
 let singleton (x: int): node = N (0, x, [])
 
 let link0 (tree1 : node0) (tree2 : node0{rank0 tree1 = rank0 tree2}) : node0 =
@@ -69,8 +75,13 @@ let rec list_node_to_node0 (l: list node) : list node0 =
     | [] -> []
     | n::ns -> n :: list_node_to_node0 ns
 
-let number_nodes_list (l: list node) : nat = number_nodes0_list (list_node_to_node0 l)
+let number_nodes_list (l: list node) : nat =
+  number_nodes0_list (list_node_to_node0 l)
 
+
+(*
+  Definición de Binomial Heap y sus operaciones
+*)
 type bheap = list node
 
 let emptyHeap : bheap = []
@@ -133,6 +144,10 @@ let extractMin (bh: bheap{Cons? bh}) : int & bheap =
   root0 m, merge (rev (children m)) hs
   
 
+(*
+  Lemas de las operaciones de Binomial Heap
+*)
+
 let rec lemma_removeMinTree_size (bh : bheap{Cons? bh})
   : Lemma (number_nodes_list bh == number_nodes_list (snd (removeMinTree bh)) + number_nodes (fst (removeMinTree bh)))
   = 
@@ -179,8 +194,16 @@ let rec lemma_merge_size (bh1 bh2: bheap)
                                      lemma_merge_size hs1 hs2
                                     )
 
+let rec lemma_size_children0_children (n: node)
+ : Lemma (ensures number_nodes_list (children n) == number_nodes0_list (children0 n)) (decreases (length (children0 n)))
+ =
+  match n with
+    | N (_,_, []) -> ()
+    | N (r,k, c::cs) ->  lemma_size_children0_children(N (r,k,cs))
+
 let lemma_size_children (n: node)
-  : Lemma (number_nodes n == number_nodes_list (children n) - 1) = admit()
+  : Lemma (number_nodes n == number_nodes_list (children n) + 1) = lemma_size_children0_children n
+
 
 let lemma_deleteMin_size (bh: bheap{Cons? bh})
   : Lemma (number_nodes_list (snd (extractMin bh)) == number_nodes_list bh - 1)
@@ -194,16 +217,21 @@ let lemma_deleteMin_size (bh: bheap{Cons? bh})
     number_nodes_list (rev (children m)) + number_nodes_list hs;
     == {lemma_rev_number_nodes (children m) } 
     number_nodes_list (children m) + number_nodes_list hs;
+    == { lemma_size_children m }
+    (number_nodes m - 1) + number_nodes_list hs;
     == { lemma_removeMinTree_size bh }
     number_nodes_list bh - 1;
   }
 
-let rec toList (bh: bheap) : Tot (list int) (decreases (number_nodes_list bh))=
+(*
+  Transformaciones de Binomial Heaps a listas
+*)
+let rec toOrderList (bh: bheap) : Tot (list int) (decreases (number_nodes_list bh))=
   match bh with
     | [] -> []
     | _ -> let m, bh' = extractMin bh in
            lemma_deleteMin_size bh;
-           m :: toList bh'
+           m :: toOrderList bh'
 
 let rec elems_node0 (n: node0) : list int =
   let N (x, _, c) = n in
@@ -213,30 +241,139 @@ and elems_nodes (cs: list node0) : list int =
     | [] -> []
     | c::cs' -> elems_node0 c @ elems_nodes cs'
 
-let rec toList2 (bh: bheap) : Tot (list int)=
+let rec toList (bh: bheap) : Tot (list int)=
   match bh with
     | [] -> []
-    | h::hs -> elems_node0 h @ toList2 hs 
+    | h::hs -> elems_node0 h @ toList hs
+
+let clist t = l : list t {Cons? l}
+
+let rec toListList (bh: bheap) : Tot (list (clist int))=
+  match bh with
+    | [] -> []
+    | h::hs -> elems_node0 h :: toListList hs 
 
 let rec fromList (l: list int) : bheap =
   match l with
     | [] -> []
     | x::xs -> insert x (fromList xs)
 
+
 (*
-let models (bh : bheap) (xs : list int) : prop =
-  toList bh == xs
+  Relación de permutación entre listas y 'models' entre Binomial Heap y listas
 *)
 
+let rec count (x:int) (l:list int) : nat =
+  match l with
+    | [] -> 0
+    | y::l' -> (if x = y then 1 else 0) + count x l'
+
+let perm (l1 l2: list int) : GTot Type =
+  forall (x:int). count x l1 == count x l2
+
 let models (bh : bheap) (xs : list int) : prop =
-  perm (toList2 bh) xs
+  perm (toList bh) xs
 
-assume val min_list (xs: list int) : int
-assume val remove_list (x: int) (xs: list int) : list int
+let (=~) = perm
 
+val min_list (xs: list int{Cons? xs}) : int
+let rec min_list xs =
+  match xs with
+  | [x] -> x
+  | x::xs -> min x (min_list xs)
+
+val min_in_list (xs: list int { length xs > 0 }) :
+  Lemma (ensures mem (min_list xs) xs)
+
+let rec min_in_list xs =
+  match xs with
+  | [x] -> ()
+  | x::xs' ->
+    min_in_list xs'
+
+let rec count_mem (l:list int) : Lemma
+  (ensures forall x. mem x l <==> count x l > 0)
+=
+  match l with
+  | [] -> ()
+  | y::ys ->
+    count_mem ys
+
+val perm_mem : xs:list int -> ys:list int ->
+  Lemma (requires perm xs ys)
+        (ensures forall x. mem x xs <==> mem x ys)
+
+let perm_mem xs ys =
+  count_mem xs;
+  count_mem ys
+
+let rec min_is_le_all (xs: list int { length xs > 0 }) : Lemma
+  (ensures forall y. mem y xs ==> min_list xs <= y)
+=
+  match xs with
+  | [x] -> () 
+  | x::xs' -> min_is_le_all xs'
+
+val min_list_perm (xs : list int{Cons? xs}) (ys : list int)
+  : Lemma (requires xs =~ ys)
+          (ensures min_list xs == min_list ys)
+let min_list_perm xs ys =
+  perm_mem xs ys;
+  min_in_list xs;
+  min_in_list ys;
+  min_is_le_all xs;
+  min_is_le_all ys
+  
+
+let rec min_list_concat (xs ys : clist int)
+  : Lemma (ensures min_list (xs @ ys) == min_list xs `min` min_list ys) (decreases (length (xs@ys)))
+  = 
+  match xs with
+    | [x] -> ()
+    | x::xs' -> min_list_concat xs' ys
+
+let rec lemma_toList_perm (bh: bheap{Cons? bh})
+  : Lemma (let minh, rest = removeMinTree bh in toList bh =~ elems_node0 minh @ toList rest) 
+= match bh with
+    | [h] -> ()
+    | h::hs -> admit()
+
+let lemma_minheap_gt_rest (bh: bheap{Cons? bh})
+  : Lemma (let minh, rest = removeMinTree bh in assume (Cons? rest); min_list (elems_node0 minh) <= min_list (toList rest)) 
+= admit()
+
+let lemma_min_list_root (bh: bheap{Cons? bh})
+  : Lemma (let minh, _ = removeMinTree bh in min_list (elems_node0 minh) = root0 minh) 
+= admit()
+
+
+(*
+  Lemas de correctitud de las operaciones Binomial Heap
+*)
 val findMin_ok (bh : bheap) (xs : list int{Cons? xs})
   : Lemma (requires models bh xs)
           (ensures findMin bh == min_list xs)
+let findMin_ok bh xs =
+  let minh, rest = removeMinTree bh in
+  assume (Cons? rest); // hmm....
+  calc (==) {
+    min_list xs;
+    == { min_list_perm (toList bh) xs }
+    min_list (toList bh);
+    == { lemma_toList_perm bh;
+         min_list_perm (toList bh) (elems_node0 minh @ toList rest);
+         min_list_concat (elems_node0 minh) (toList rest)
+       }
+    min_list (elems_node0 minh) `min` min_list (toList rest);
+    == { lemma_minheap_gt_rest bh }
+    min_list (elems_node0 minh);
+    == { lemma_min_list_root bh } // deberia salir facil por propiedad de heap
+    root0 minh;
+    == {}
+    findMin bh;
+  }
+
+assume val remove_list (x: int) (xs: list int) : list int
 
 val deleteMin_ok (bh : bheap) (xs : list int{Cons? xs})
   : Lemma (requires models bh xs)
@@ -250,7 +387,7 @@ assume val merge_sort (xs ys: list int) : list int
 
 assume val merge_ok (bh1 bh2: bheap) (xs ys: list int) 
   : Lemma (requires models bh1 xs /\ models bh2 ys)
-          (ensures models (merge bh1 bh2) (merge_sort xs ys))
+          (ensures models (merge bh1 bh2) (xs @ ys))
 
 (*
 let insert_ok  (bh : bheap) (x : int) (xs : list int)
