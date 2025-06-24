@@ -343,10 +343,7 @@ let rec count_append (l1 l2: list int)
 =
   match l1 with
   | [] -> ()
-  | y::ys ->
-    count_append ys l2;
-    // Prove for head y
-    ()
+  | y::ys -> count_append ys l2
 
 let perm_comm (l1 l2:list int)
   : Lemma (perm (l1 @ l2) (l2 @ l1)) 
