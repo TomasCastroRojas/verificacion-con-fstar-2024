@@ -33,13 +33,17 @@ let root0 (tree : node0) : int =
   let N (_,r,_) = tree in
   r
 
+
+
 let children0 (tree : node0) : list node0 =
   let N (_,_,c) = tree in
   c
 
 type node = n:node0{is_heap0 n}
 
-
+let root (tree : node) : int =
+  let N (_,r,_) = tree in
+  r
 (*
   Definición de operaciones de nodos
 *)
@@ -234,8 +238,10 @@ let rec toOrderList (bh: bheap) : Tot (list int) (decreases (number_nodes_list b
            m :: toOrderList bh'
 
 let rec elems_node0 (n: node0) : list int =
-  let N (x, _, c) = n in
-  x :: elems_nodes c
+  let N (_, x, c) = n in
+  match c with
+    | [] -> [x]
+    | _ -> x :: elems_nodes c
 and elems_nodes (cs: list node0) : list int =
   match cs with
     | [] -> []
@@ -332,21 +338,140 @@ let rec lemma_min_list_concat (xs ys : clist int)
     | [x] -> ()
     | x::xs' -> lemma_min_list_concat xs' ys
 
+let rec count_append (l1 l2: list int)
+  : Lemma (forall x. count x (l1 @ l2) == count x l1 + count x l2)
+=
+  match l1 with
+  | [] -> ()
+  | y::ys ->
+    count_append ys l2;
+    // Prove for head y
+    ()
+
+let perm_comm (l1 l2:list int)
+  : Lemma (perm (l1 @ l2) (l2 @ l1)) 
+=
+  count_append l1 l2;
+  count_append l2 l1
+
+let perm_sym (l1 l2: list int) 
+  : Lemma (requires perm l1 l2)
+          (ensures perm l2 l1) = ()
+
+let perm_trans (l1 l2 l3: list int)
+  : Lemma (requires perm l1 l2 /\ perm l2 l3)
+          (ensures perm l1 l3) = ()
+
+let rec perm_preappend (l1 l2 l3: list int)
+  : Lemma (requires perm l2 l3)
+          (ensures perm (l1 @ l2) (l1 @ l3))
+=
+ match l1 with
+  | [] -> ()
+  | x::xs -> perm_preappend xs l2 l3
+
+let perm_append (l1 l2 l3 l4: list int)
+  : Lemma (requires perm l1 l3 /\ perm l2 l4)
+          (ensures perm (l1 @ l2) (l3 @ l4)) 
+=
+  count_append l1 l2;
+  count_append l3 l4
+
+let rec append_assoc (l1 l2 l3: list int)
+  : Lemma (l1 @ (l2 @ l3) == (l1 @ l2) @ l3) 
+=
+  match l1 with
+    | [] -> ()
+    | x::xs -> append_assoc xs l2 l3
+
+let perm_comm_assoc (l1 l2 l3: list int)
+  : Lemma (perm ((l1 @ l2) @ l3) ((l2 @ l1) @ l3))
+= 
+  perm_comm l1 l2;
+  count_append (l1 @ l2) l3;
+  count_append (l2 @ l1) l3
+
 let rec lemma_toList_perm (bh: bheap{Cons? bh})
   : Lemma (let minh, rest = removeMinTree bh in toList bh =~ elems_node0 minh @ toList rest) 
 = match bh with
     | [h] -> ()
-    | h::hs -> admit()
+    | h::hs -> let m, hs' = removeMinTree hs in
+               if root0 h < root0 m
+               then ()
+               else calc (=~)
+               {
+                toList bh;
+                =~ {}
+                elems_node0 h @ toList hs;
+                =~ {lemma_toList_perm hs; perm_preappend (elems_node0 h) (toList hs) (elems_node0 m @ toList hs')}
+                elems_node0 h @ (elems_node0 m @ toList hs');
+                == {append_assoc (elems_node0 h) (elems_node0 m) (toList hs')}
+                (elems_node0 h @ elems_node0 m) @ toList hs';
+                =~ {perm_comm_assoc (elems_node0 h) (elems_node0 m) (toList hs')}
+                (elems_node0 m @ elems_node0 h) @ toList hs';
+                == {append_assoc (elems_node0 m) (elems_node0 h) (toList hs')}
+                elems_node0 m @ (elems_node0 h @ toList hs');
+               }
 
-let lemma_minheap_gt_rest (bh: bheap{Cons? bh})
-  : Lemma (let minh, rest = removeMinTree bh in assume (Cons? rest); min_list (elems_node0 minh) <= min_list (toList rest)) 
-= admit()
+let lemma_min_node_root (n: node)
+  : Lemma (ensures min_list (elems_node0 n) == root0 n) 
+= 
+  let N (_, k, cs) = n in
+  match cs with
+  | [] -> ()
+  | _ -> 
+    calc (==) {
+      min_list (elems_node0 n);
+      == {}
+      min_list (k :: elems_nodes cs);
+      == {}
+      min_list ([k] @ elems_nodes cs);
+      == { lemma_min_list_concat (elems_node0 n) (elems_nodes cs) }
+      min_list ([k]) `min` min_list (elems_nodes cs);
+      == { }
+      k `min` min_list (elems_nodes cs);
+      == { admit() } // root n <= min_list (elems_nodes cs) porque es un heap
+      k;
+    }
+
 
 let lemma_min_list_root (bh: bheap{Cons? bh})
   : Lemma (let minh, _ = removeMinTree bh in min_list (elems_node0 minh) = root0 minh) 
+= 
+  match bh with
+    | [h] -> lemma_min_node_root h
+    | h::hs -> let minh, _ = removeMinTree hs in
+               if root0 h < root0 minh
+               then lemma_min_node_root h
+               else lemma_min_node_root minh
+
+let lemma_min_append (min heap:node) (bh: bheap{Cons? bh})
+  : Lemma (requires (min_list (elems_node0 min) <= min_list (elems_node0 heap) /\ min_list (elems_node0 min) <= min_list (toList bh)))
+          (ensures min_list (elems_node0 min) <= min_list (elems_node0 heap @ toList bh)) 
 = admit()
 
+let lemma_min_trans (min heap:node) (bh: bheap{Cons? bh})
+  : Lemma (requires min_list (elems_node0 min) <= min_list (elems_node0 heap) /\ min_list (elems_node0 heap) <= min_list (toList bh))
+          (ensures min_list (elems_node0 min) <= min_list (toList bh)) = ()
 
+let rec lemma_minheap_gt_rest (bh: bheap{Cons? bh})
+  : Lemma (let minh, rest = removeMinTree bh in assume (Cons? rest); min_list (elems_node0 minh) <= min_list (toList rest)) 
+= 
+  match bh with
+    | [h] -> admit()
+    | h::hs -> let minh, hs' = removeMinTree hs in
+               if root0 h < root0 minh
+               then 
+                admit()
+                //lemma_minheap_gt_rest hs; 
+                //lemma_min_trans h minh hs'; 
+                //lemma_min_append h minh hs'
+
+               else admit()
+                    //lemma_minheap_gt_rest hs;    
+                    //lemma_min_node_root h;       
+                    //lemma_min_append minh h hs'
+                    
 (*
   Lemas de correctitud de las operaciones Binomial Heap
 *)
