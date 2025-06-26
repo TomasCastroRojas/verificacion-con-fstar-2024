@@ -200,13 +200,16 @@ let rec lemma_merge_size (bh1 bh2: bheap)
 
 let rec lemma_size_children0_children (n: node)
  : Lemma (ensures number_nodes_list (children n) == number_nodes0_list (children0 n)) (decreases (length (children0 n)))
+         [SMTPat (number_nodes_list (children n))]
  =
   match n with
     | N (_,_, []) -> ()
     | N (r,k, c::cs) ->  lemma_size_children0_children(N (r,k,cs))
 
 let lemma_size_children (n: node)
-  : Lemma (number_nodes n == number_nodes_list (children n) + 1) = lemma_size_children0_children n
+  : Lemma (number_nodes n == number_nodes_list (children n) + 1) 
+          [SMTPat (number_nodes n)]
+= lemma_size_children0_children n
 
 
 let lemma_deleteMin_size (bh: bheap{Cons? bh})
@@ -343,7 +346,7 @@ let rec count_append (l1 l2: list int)
 =
   match l1 with
   | [] -> ()
-  | y::ys -> count_append ys l2
+  | y::ys -> count_append ys l2; ()
 
 let perm_comm (l1 l2:list int)
   : Lemma (perm (l1 @ l2) (l2 @ l1)) 
@@ -410,6 +413,20 @@ let rec lemma_toList_perm (bh: bheap{Cons? bh})
                 elems_node0 m @ (elems_node0 h @ toList hs');
                }
 
+let lemma_root_gt_children_root (n: node)
+  : Lemma (ensures forall c. mem c (children0 n) ==> root0 n < root0 c) 
+= admit()
+
+let lemma_min_children_root (n: node)
+  : Lemma (requires Cons? (children0 n))
+          (ensures min_list (elems_nodes (children0 n)) == min_list (map root0 (children0 n))) 
+= admit()
+
+let lemma_root_gt_children (n: node)
+  : Lemma (requires Cons? (children0 n))
+          (ensures root0 n <= min_list (elems_nodes (children0 n)))
+=  admit()
+
 let lemma_min_node_root (n: node)
   : Lemma (ensures min_list (elems_node0 n) == root0 n) 
 = 
@@ -423,11 +440,11 @@ let lemma_min_node_root (n: node)
       min_list (k :: elems_nodes cs);
       == {}
       min_list ([k] @ elems_nodes cs);
-      == { lemma_min_list_concat (elems_node0 n) (elems_nodes cs) }
+      == { lemma_min_list_concat [k] (elems_nodes cs) }
       min_list ([k]) `min` min_list (elems_nodes cs);
       == { }
       k `min` min_list (elems_nodes cs);
-      == { admit() } // root n <= min_list (elems_nodes cs) porque es un heap
+      == { lemma_root_gt_children n }
       k;
     }
 
@@ -457,29 +474,48 @@ let lemma_min_root_elems (h1 h2: node)
 = lemma_min_node_root h1;
   lemma_min_node_root h2
 
+
+let min_of_removeMinTree (bh:bheap{Cons? bh})
+  : Lemma (
+    let minh, rest = removeMinTree bh in
+    match rest with
+    | [] -> min_list (toList bh) == min_list (elems_node0 minh)
+    | _ -> min_list (toList bh) == min (min_list (elems_node0 minh)) (min_list (toList rest))
+  )
+= let minh, rest = removeMinTree bh in
+  match rest with
+    | [] -> ()
+    | _ ->
+      calc (==) {
+        min_list (toList bh);
+        == { lemma_toList_perm bh; lemma_min_list_perm (toList bh) (elems_node0 minh @ toList rest) }
+        min_list (elems_node0 minh @ toList rest);
+        == { lemma_min_list_concat (elems_node0 minh) (toList rest) }
+        min_list (elems_node0 minh) `min` min_list (toList rest);
+      }
 let rec lemma_minheap_gt_rest (bh: bheap{Cons? bh})
-  : Lemma (let minh, rest = removeMinTree bh in assume (Cons? rest); min_list (elems_node0 minh) <= min_list (toList rest)) 
+  : Lemma (let minh, rest = removeMinTree bh in match rest with | [] -> True | _ -> min_list (elems_node0 minh) <= min_list (toList rest)) 
 = 
   match bh with
-  | [h] ->
-      // Caso base: bh tiene un solo árbol, por lo que rest es vacío.
-      // No hay nada que probar porque `Cons? rest` no se cumple.
-      // Sin embargo, no funciona porque no puede probar min_list (elems_node0 h) <= min_list []
-      admit()
+  | [h] -> ()
   | h::hs ->
       let minh, hs' = removeMinTree hs in
-      assume (Cons? hs');
-      if root0 h < root0 minh 
-      then (
+      match hs' with
+      | [] -> if root0 h < root0 minh 
+              then lemma_min_root_elems h minh
+              else lemma_min_root_elems minh h
+      | _ ->
         lemma_minheap_gt_rest hs;
-        lemma_min_root_elems h minh;
-        lemma_min_append h minh hs'
-      )
-      else (
-        lemma_minheap_gt_rest hs;
-        lemma_min_root_elems minh h;
-        lemma_min_append minh h hs'
-      )
+        min_of_removeMinTree hs;
+        if root0 h < root0 minh 
+        then (
+          lemma_min_root_elems h minh;
+          lemma_min_append h minh hs'
+        )
+        else (
+          lemma_min_root_elems minh h;
+          lemma_min_append minh h hs'
+        )
                     
 (*
   Lemas de correctitud de las operaciones Binomial Heap
