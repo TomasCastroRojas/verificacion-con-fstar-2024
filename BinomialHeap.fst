@@ -346,7 +346,7 @@ let rec count_append (l1 l2: list int)
 =
   match l1 with
   | [] -> ()
-  | y::ys -> count_append ys l2; ()
+  | y::ys -> count_append ys l2
 
 let perm_comm (l1 l2:list int)
   : Lemma (perm (l1 @ l2) (l2 @ l1)) 
@@ -413,19 +413,27 @@ let rec lemma_toList_perm (bh: bheap{Cons? bh})
                 elems_node0 m @ (elems_node0 h @ toList hs');
                }
 
-let lemma_root_gt_children_root (n: node)
-  : Lemma (ensures forall c. mem c (children0 n) ==> root0 n < root0 c) 
-= admit()
+let lemma_node_is_heap0 (n: node) : Lemma
+  (ensures (
+    let N (_, k, cs) = n in
+    is_heap0 n /\ is_heap cs
+  ))
+= ()
 
-let lemma_min_children_root (n: node)
-  : Lemma (requires Cons? (children0 n))
-          (ensures min_list (elems_nodes (children0 n)) == min_list (map root0 (children0 n))) 
+let lemma_is_heap0_children (n: node) : Lemma
+  (requires is_heap0 n)
+  (ensures (
+    let N (_, k, cs) = n in
+    forall c. mem c cs ==> k <= root0 c
+  ))
 = admit()
 
 let lemma_root_gt_children (n: node)
-  : Lemma (requires Cons? (children0 n))
-          (ensures root0 n <= min_list (elems_nodes (children0 n)))
-=  admit()
+  : Lemma (ensures (match children0 n with | [] -> True | cs -> root0 n <= min_list (elems_nodes cs)))
+= let N (_, k, cs) = n in
+  match cs with
+  | [] -> ()
+  | _ -> admit()
 
 let lemma_min_node_root (n: node)
   : Lemma (ensures min_list (elems_node0 n) == root0 n) 
@@ -448,17 +456,6 @@ let lemma_min_node_root (n: node)
       k;
     }
 
-
-let lemma_min_list_root (bh: bheap{Cons? bh})
-  : Lemma (let minh, _ = removeMinTree bh in min_list (elems_node0 minh) = root0 minh) 
-= 
-  match bh with
-    | [h] -> lemma_min_node_root h
-    | h::hs -> let minh, _ = removeMinTree hs in
-               if root0 h < root0 minh
-               then lemma_min_node_root h
-               else lemma_min_node_root minh
-
 let lemma_min_append (min heap:node) (bh: bheap{Cons? bh})
   : Lemma (requires (min_list (elems_node0 min) <= min_list (elems_node0 heap) /\ min_list (elems_node0 min) <= min_list (toList bh)))
           (ensures min_list (elems_node0 min) <= min_list (elems_node0 heap @ toList bh)) 
@@ -479,8 +476,8 @@ let min_of_removeMinTree (bh:bheap{Cons? bh})
   : Lemma (
     let minh, rest = removeMinTree bh in
     match rest with
-    | [] -> min_list (toList bh) == min_list (elems_node0 minh)
-    | _ -> min_list (toList bh) == min (min_list (elems_node0 minh)) (min_list (toList rest))
+      | [] -> min_list (toList bh) == min_list (elems_node0 minh)
+      | _ -> min_list (toList bh) == min (min_list (elems_node0 minh)) (min_list (toList rest))
   )
 = let minh, rest = removeMinTree bh in
   match rest with
@@ -494,7 +491,12 @@ let min_of_removeMinTree (bh:bheap{Cons? bh})
         min_list (elems_node0 minh) `min` min_list (toList rest);
       }
 let rec lemma_minheap_gt_rest (bh: bheap{Cons? bh})
-  : Lemma (let minh, rest = removeMinTree bh in match rest with | [] -> True | _ -> min_list (elems_node0 minh) <= min_list (toList rest)) 
+  : Lemma (
+    let minh, rest = removeMinTree bh in 
+    match rest with 
+      | [] -> True 
+      | _ -> min_list (elems_node0 minh) <= min_list (toList rest)
+    ) 
 = 
   match bh with
   | [h] -> ()
@@ -516,7 +518,20 @@ let rec lemma_minheap_gt_rest (bh: bheap{Cons? bh})
           lemma_min_root_elems minh h;
           lemma_min_append minh h hs'
         )
-                    
+
+let rec lemma_min_list_root (bh: bheap{Cons? bh})
+  : Lemma (let minh, _ = removeMinTree bh in min_list (toList bh) = root0 minh) 
+= 
+  match bh with
+    | [h] -> lemma_min_node_root h
+    | h::hs -> let minh, _ = removeMinTree hs in
+               lemma_min_list_root hs;
+               min_of_removeMinTree bh;
+               lemma_minheap_gt_rest bh;
+               if root0 h < root0 minh
+               then lemma_min_node_root h
+               else lemma_min_node_root minh
+              
 (*
   Lemas de correctitud de las operaciones Binomial Heap
 *)
@@ -524,20 +539,12 @@ val findMin_ok (bh : bheap) (xs : list int{Cons? xs})
   : Lemma (requires models bh xs)
           (ensures findMin bh == min_list xs)
 let findMin_ok bh xs =
-  let minh, rest = removeMinTree bh in
-  assume (Cons? rest); // hmm....
+  let minh, _ = removeMinTree bh in
   calc (==) {
     min_list xs;
     == { lemma_min_list_perm (toList bh) xs }
     min_list (toList bh);
-    == { lemma_toList_perm bh;
-         lemma_min_list_perm (toList bh) (elems_node0 minh @ toList rest);
-         lemma_min_list_concat (elems_node0 minh) (toList rest)
-       }
-    min_list (elems_node0 minh) `min` min_list (toList rest);
-    == { lemma_minheap_gt_rest bh }
-    min_list (elems_node0 minh);
-    == { lemma_min_list_root bh } // deberia salir facil por propiedad de heap
+    == { lemma_min_list_root bh }
     root0 minh;
     == {}
     findMin bh;
@@ -549,25 +556,17 @@ val deleteMin_ok (bh : bheap) (xs : list int{Cons? xs})
   : Lemma (requires models bh xs)
           (ensures models (snd (extractMin bh)) (remove_list (min_list xs) xs))
 
+
+val merge_ok (bh1 bh2: bheap) (xs ys: list int) 
+  : Lemma (requires models bh1 xs /\ models bh2 ys)
+          (ensures models (merge bh1 bh2) (xs @ ys))
+
+
+let lemma_insert_perm (bh: bheap) (x:int)
+  : Lemma (perm (toList (insert x bh)) (x :: toList bh)) = admit()
+
 val insert_ok  (bh : bheap) (x : int) (xs : list int)
   : Lemma (requires models bh xs)
           (ensures models (insert x bh) (x::xs))
 
-assume val merge_sort (xs ys: list int) : list int
-
-assume val merge_ok (bh1 bh2: bheap) (xs ys: list int) 
-  : Lemma (requires models bh1 xs /\ models bh2 ys)
-          (ensures models (merge bh1 bh2) (xs @ ys))
-
-(*
-let insert_ok  (bh : bheap) (x : int) (xs : list int)
-  : Lemma (requires models bh xs)
-          (ensures models (insert x bh) (insertion_sort  (x :: xs)))
-= assert([singleton x] `models` [x]); 
-  merge_ok [singleton x] bh [x] xs; 
-  assert (merge [singleton x] bh `models` (merge_sort [x] xs));
-  assert (insert x bh `models` (merge_sort [x] xs));
-  assert (insert x bh `models` (InsertionSort.insert x xs));
-  admit()
-
-*)
+let insert_ok bh x xs = lemma_insert_perm bh x
