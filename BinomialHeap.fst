@@ -370,6 +370,14 @@ let rec perm_preappend (l1 l2 l3: list int)
   | [] -> ()
   | x::xs -> perm_preappend xs l2 l3
 
+let rec perm_postappend (l1 l2 l3: list int)
+  : Lemma (requires perm l1 l2)
+          (ensures perm (l1 @ l3) (l2 @ l3))
+=
+ match l3 with
+  | [] -> ()
+  | x::xs -> count_append l1 l3; count_append l2 l3; perm_postappend l1 l2 xs
+
 let perm_append (l1 l2 l3 l4: list int)
   : Lemma (requires perm l1 l3 /\ perm l2 l4)
           (ensures perm (l1 @ l2) (l3 @ l4)) 
@@ -384,12 +392,15 @@ let rec append_assoc (l1 l2 l3: list int)
     | [] -> ()
     | x::xs -> append_assoc xs l2 l3
 
-let perm_comm_assoc (l1 l2 l3: list int)
+let perm_comm_assoc_left (l1 l2 l3: list int)
   : Lemma (perm ((l1 @ l2) @ l3) ((l2 @ l1) @ l3))
 = 
-  perm_comm l1 l2;
-  count_append (l1 @ l2) l3;
-  count_append (l2 @ l1) l3
+  perm_comm l1 l2; perm_postappend (l1 @ l2) (l2 @ l1) l3
+
+let perm_comm_assoc_right (l1 l2 l3: list int)
+  : Lemma (perm (l1 @ (l2 @ l3)) (l1 @ (l3 @ l2)))
+= 
+  perm_comm l2 l3; perm_preappend l1 (l2 @ l3) (l3 @ l2)
 
 let rec lemma_toList_perm (bh: bheap{Cons? bh})
   : Lemma (let minh, rest = removeMinTree bh in toList bh =~ elems_node0 minh @ toList rest) 
@@ -407,7 +418,7 @@ let rec lemma_toList_perm (bh: bheap{Cons? bh})
                 elems_node0 h @ (elems_node0 m @ toList hs');
                 == {append_assoc (elems_node0 h) (elems_node0 m) (toList hs')}
                 (elems_node0 h @ elems_node0 m) @ toList hs';
-                =~ {perm_comm_assoc (elems_node0 h) (elems_node0 m) (toList hs')}
+                =~ {perm_comm_assoc_left (elems_node0 h) (elems_node0 m) (toList hs')}
                 (elems_node0 m @ elems_node0 h) @ toList hs';
                 == {append_assoc (elems_node0 m) (elems_node0 h) (toList hs')}
                 elems_node0 m @ (elems_node0 h @ toList hs');
@@ -420,20 +431,13 @@ let lemma_node_is_heap0 (n: node) : Lemma
   ))
 = ()
 
-let lemma_is_heap0_children (n: node) : Lemma
-  (requires is_heap0 n)
-  (ensures (
-    let N (_, k, cs) = n in
-    forall c. mem c cs ==> k <= root0 c
-  ))
+let lemma_root_gt_children (n: node)
+  : Lemma (ensures (forall x. mem x (elems_nodes (children0 n)) ==> root0 n <= x))
 = admit()
 
-let lemma_root_gt_children (n: node)
+let lemma_root_gt_min_children (n: node)
   : Lemma (ensures (match children0 n with | [] -> True | cs -> root0 n <= min_list (elems_nodes cs)))
-= let N (_, k, cs) = n in
-  match cs with
-  | [] -> ()
-  | _ -> admit()
+= admit()
 
 let lemma_min_node_root (n: node)
   : Lemma (ensures min_list (elems_node0 n) == root0 n) 
@@ -452,7 +456,7 @@ let lemma_min_node_root (n: node)
       min_list ([k]) `min` min_list (elems_nodes cs);
       == { }
       k `min` min_list (elems_nodes cs);
-      == { lemma_root_gt_children n }
+      == { lemma_root_gt_min_children n }
       k;
     }
 
@@ -519,13 +523,13 @@ let rec lemma_minheap_gt_rest (bh: bheap{Cons? bh})
           lemma_min_append minh h hs'
         )
 
-let rec lemma_min_list_root (bh: bheap{Cons? bh})
+let rec lemma_min_removeMintree (bh: bheap{Cons? bh})
   : Lemma (let minh, _ = removeMinTree bh in min_list (toList bh) = root0 minh) 
 = 
   match bh with
     | [h] -> lemma_min_node_root h
     | h::hs -> let minh, _ = removeMinTree hs in
-               lemma_min_list_root hs;
+               lemma_min_removeMintree hs;
                min_of_removeMinTree bh;
                lemma_minheap_gt_rest bh;
                if root0 h < root0 minh
@@ -544,7 +548,7 @@ let findMin_ok bh xs =
     min_list xs;
     == { lemma_min_list_perm (toList bh) xs }
     min_list (toList bh);
-    == { lemma_min_list_root bh }
+    == { lemma_min_removeMintree bh }
     root0 minh;
     == {}
     findMin bh;
@@ -557,16 +561,76 @@ val deleteMin_ok (bh : bheap) (xs : list int{Cons? xs})
           (ensures models (snd (extractMin bh)) (remove_list (min_list xs) xs))
 
 
-val merge_ok (bh1 bh2: bheap) (xs ys: list int) 
-  : Lemma (requires models bh1 xs /\ models bh2 ys)
-          (ensures models (merge bh1 bh2) (xs @ ys))
+let lemma_link_perm (tree1 tree2: node)
+  : Lemma (requires rank0 tree1 = rank0 tree2)
+          (ensures perm (elems_node0 (link tree1 tree2)) (elems_node0 tree1 @ elems_node0 tree2))
+=
+  let N (r1, k1, c1) = tree1 in
+  let N (_, k2, c2) = tree2 in
+  if k1 <= k2
+  then calc (=~) {
+    elems_node0 (link tree1 tree2);
+    == {}
+    elems_node0 (N (r1 + 1, k1, tree2 :: c1));
+    == {}
+    k1 :: elems_nodes (tree2 :: c1);
+    == {  }
+    k1 :: elems_node0 tree2 @ elems_nodes c1;
+    =~ { perm_comm_assoc_right [k1] (elems_node0 tree2) (elems_nodes c1) }
+    k1 :: elems_nodes c1 @ elems_node0 tree2;
+    == { }
+    elems_node0 tree1 @ elems_node0 tree2;
+  }
+  else calc (=~) {
+    elems_node0 (link tree1 tree2);
+    == {}
+    elems_node0 (N (r1 + 1, k2, tree1 :: c2));
+    == {}
+    k2 :: elems_nodes (tree1 :: c2);
+    == {  }
+    k2 :: elems_node0 tree1 @ elems_nodes c2;
+    =~ { perm_comm_assoc_right [k2] (elems_node0 tree1) (elems_nodes c2) }
+    k2 :: elems_nodes c2 @ elems_node0 tree1;
+    == { }
+    elems_node0 tree2 @ elems_node0 tree1;
+    =~ { perm_comm (elems_node0 tree1) (elems_node0 tree2) }
+    elems_node0 tree1 @ elems_node0 tree2;
+  }
 
-
-let lemma_insert_perm (bh: bheap) (x:int)
-  : Lemma (perm (toList (insert x bh)) (x :: toList bh)) = admit()
+let rec lemma_insertTree_perm (tree: node) (bh: bheap)
+  : Lemma (ensures perm (toList (insertTree tree bh)) (elems_node0 tree @ toList bh))
+          (decreases (length bh))
+=
+  match bh with
+  | [] -> ()
+  | h::hs -> if rank0 tree < rank0 h
+             then ()
+             else if rank0 tree = rank0 h
+                  then calc (=~) {
+                    toList (insertTree (link tree h) hs);
+                    =~ { lemma_insertTree_perm (link tree h) hs }
+                    elems_node0 (link tree h) @ toList hs;
+                    =~ { lemma_link_perm tree h; perm_postappend (elems_node0 (link tree h)) ((elems_node0 tree) @ (elems_node0 h)) (toList hs) }
+                    (elems_node0 tree @ elems_node0 h) @ toList hs;
+                    == { append_assoc (elems_node0 tree) (elems_node0 h) (toList hs) }
+                    elems_node0 tree @ (elems_node0 h @ toList hs);
+                  }
+                  else calc (=~) {
+                    toList (h :: insertTree tree hs);
+                    == {  }
+                    elems_node0 h @ toList (insertTree tree hs);
+                    =~ { lemma_insertTree_perm tree hs; perm_preappend (elems_node0 h) (toList (insertTree tree hs)) ((elems_node0 tree) @ (toList hs)) }
+                    elems_node0 h @ (elems_node0 tree @ toList hs);
+                    == { append_assoc (elems_node0 h) (elems_node0 tree) (toList hs) }
+                    (elems_node0 h @ elems_node0 tree) @ toList hs; 
+                    =~ {perm_comm_assoc_left (elems_node0 h) (elems_node0 tree) (toList hs)}
+                    (elems_node0 tree @ elems_node0 h) @ toList hs;
+                    == { append_assoc (elems_node0 tree) (elems_node0 h) (toList hs)}
+                    elems_node0 tree @ (elems_node0 h @ toList hs);
+                  }
 
 val insert_ok  (bh : bheap) (x : int) (xs : list int)
   : Lemma (requires models bh xs)
           (ensures models (insert x bh) (x::xs))
 
-let insert_ok bh x xs = lemma_insert_perm bh x
+let insert_ok bh x xs = lemma_insertTree_perm (singleton x) bh
