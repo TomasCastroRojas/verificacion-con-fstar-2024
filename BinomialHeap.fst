@@ -535,32 +535,6 @@ let rec lemma_min_removeMintree (bh: bheap{Cons? bh})
                if root0 h < root0 minh
                then lemma_min_node_root h
                else lemma_min_node_root minh
-              
-(*
-  Lemas de correctitud de las operaciones Binomial Heap
-*)
-val findMin_ok (bh : bheap) (xs : list int{Cons? xs})
-  : Lemma (requires models bh xs)
-          (ensures findMin bh == min_list xs)
-let findMin_ok bh xs =
-  let minh, _ = removeMinTree bh in
-  calc (==) {
-    min_list xs;
-    == { lemma_min_list_perm (toList bh) xs }
-    min_list (toList bh);
-    == { lemma_min_removeMintree bh }
-    root0 minh;
-    == {}
-    findMin bh;
-  }
-
-assume val remove_list (x: int) (xs: list int) : list int
-
-val deleteMin_ok (bh : bheap) (xs : list int{Cons? xs})
-  : Lemma (requires models bh xs)
-          (ensures models (snd (extractMin bh)) (remove_list (min_list xs) xs))
-
-
 let lemma_link_perm (tree1 tree2: node)
   : Lemma (requires rank0 tree1 = rank0 tree2)
           (ensures perm (elems_node0 (link tree1 tree2)) (elems_node0 tree1 @ elems_node0 tree2))
@@ -627,7 +601,37 @@ let rec lemma_insertTree_perm (tree: node) (bh: bheap)
                     (elems_node0 tree @ elems_node0 h) @ toList hs;
                     == { append_assoc (elems_node0 tree) (elems_node0 h) (toList hs)}
                     elems_node0 tree @ (elems_node0 h @ toList hs);
-                  }
+                  }     
+
+val remove_list (x: int) (xs: list int) : list int
+
+let rec remove_list x xs =
+  match xs with
+  | [] -> []
+  | y::ys -> if x = y then ys else y :: remove_list x ys
+           
+(*
+  Lemas de correctitud de las operaciones Binomial Heap
+*)
+val findMin_ok (bh : bheap) (xs : list int{Cons? xs})
+  : Lemma (requires models bh xs)
+          (ensures findMin bh == min_list xs)
+let findMin_ok bh xs =
+  let minh, _ = removeMinTree bh in
+  calc (==) {
+    min_list xs;
+    == { lemma_min_list_perm (toList bh) xs }
+    min_list (toList bh);
+    == { lemma_min_removeMintree bh }
+    root0 minh;
+    == {}
+    findMin bh;
+  }
+
+val deleteMin_ok (bh : bheap) (xs : list int{Cons? xs})
+  : Lemma (requires models bh xs)
+          (ensures models (snd (extractMin bh)) (remove_list (min_list xs) xs))
+
 
 val insert_ok  (bh : bheap) (x : int) (xs : list int)
   : Lemma (requires models bh xs)
