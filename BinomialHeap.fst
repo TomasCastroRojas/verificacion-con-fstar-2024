@@ -669,9 +669,56 @@ let rec lemma_merge_perm (bh1 bh2: bheap)
                                (elems_node0 h1 @ toList hs1) @ (elems_node0 h2 @ toList hs2);
                              }
 
-let lemma_rev_perm (bh: bheap)
-  : Lemma (perm (toList (rev bh)) (toList bh))
+let rec lemma_cons_perm_int (x: int) (xs: list int)
+  : Lemma (ensures perm (x::xs) (xs @ [x]))
+=
+  match xs with
+  | [] -> ()
+  | y::ys -> lemma_cons_perm_int x ys
+
+let rec lemma_cons_append_perm_int (x: int) (xs ys: list int)
+  : Lemma (ensures perm (x::xs @ ys) (xs @ (x::ys)))
+= 
+  match xs with
+  | [] -> lemma_cons_perm_int x ys
+  | _::xs' -> lemma_cons_append_perm_int x xs' ys
+
+let rec lemma_rev_go_perm_int (acc xs: list int)
+  : Lemma (ensures perm (rev_go acc xs) (xs @ acc))
+          (decreases xs)
+= match xs with
+  | [] -> ()
+  | x::xs' -> lemma_cons_append_perm_int x xs' acc; lemma_rev_go_perm_int (x::acc) xs'
+
+let lemma_rev_perm_int (xs: list int)
+  : Lemma (ensures perm (rev xs) xs)
+= lemma_rev_go_perm_int [] xs
+
+let rec lemma_cons_perm_node_1 (x: node) (xs: list node)
+  : Lemma (ensures perm (toList (x::xs)) (elems_node0 x @ toList xs))
+= match xs with
+  | [] -> ()
+  | y::ys -> lemma_cons_perm_node_1 x ys
+
+let lemma_cons_perm_node (x: node) (xs: list node)
+  : Lemma (ensures perm (toList (x::xs)) (toList xs @ elems_node0 x))
+= lemma_cons_perm_node_1 x xs; perm_comm (elems_node0 x) (toList xs)
+
+let rec lemma_cons_append_perm_node (x: node) (xs ys: list node)
+  : Lemma (ensures perm (toList (x::xs @ ys)) (toList xs @ toList (x::ys)))
+=
+  match xs with
+  | [] -> lemma_cons_perm_node x ys
+  | _::xs' -> lemma_cons_append_perm_node x xs' ys; admit()
+
+let rec lemma_rev_go_perm_bheap (acc xs: list node)
+  : Lemma (ensures perm (toList (rev_go acc xs)) (toList xs @ toList acc))
+          (decreases xs)
 = admit()
+
+let lemma_rev_perm_bheap (bh: bheap)
+  : Lemma (perm (toList (rev bh)) (toList bh))
+= lemma_rev_go_perm_bheap [] bh
 
 let lemma_extractMin_perm (bh: bheap{Cons? bh})
   : Lemma (let minh, rest = removeMinTree bh in
@@ -683,7 +730,7 @@ let lemma_extractMin_perm (bh: bheap{Cons? bh})
   toList (merge (rev (children minh)) rest);
   =~ { lemma_merge_perm (rev (children minh)) rest }
   toList (rev (children minh)) @ toList rest;
-  =~ { lemma_rev_perm (children minh);
+  =~ { lemma_rev_perm_bheap (children minh);
        perm_postappend (toList (rev (children minh))) (toList (children minh)) (toList rest) }
   toList (children minh) @ toList rest;
 }
@@ -785,7 +832,7 @@ let deleteMin_ok bh xs =
     toList (merge (rev (children minh)) rest);
     =~ { lemma_merge_perm (rev (children minh)) rest }
     toList (rev (children minh)) @ toList rest;
-    =~ { lemma_rev_perm (children minh); 
+    =~ { lemma_rev_perm_bheap (children minh); 
          perm_postappend (toList (rev (children minh))) (toList (children minh)) (toList rest) }
     toList (children minh) @ toList rest;
     =~ { lemma_removeMinTree_min_perm bh;
