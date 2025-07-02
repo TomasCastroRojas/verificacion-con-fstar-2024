@@ -5,7 +5,9 @@ open FStar.Math.Lib
 open FStar.Calc
 
 (*
+*****************************************************************************
   Definición de la estructura de arboles generales y los predicados de heap.
+*****************************************************************************
 *)
 type node0 = | N of nat & int & list node0 // rank, data, children
 
@@ -33,8 +35,6 @@ let root0 (tree : node0) : int =
   let N (_,r,_) = tree in
   r
 
-
-
 let children0 (tree : node0) : list node0 =
   let N (_,_,c) = tree in
   c
@@ -44,8 +44,11 @@ type node = n:node0{is_heap0 n}
 let root (tree : node) : int =
   let N (_,r,_) = tree in
   r
+
 (*
+**************************************
   Definición de operaciones de nodos
+**************************************
 *)
 let singleton (x: int): node = N (0, x, [])
 
@@ -84,7 +87,9 @@ let number_nodes_list (l: list node) : nat =
 
 
 (*
+*************************************************
   Definición de Binomial Heap y sus operaciones
+*************************************************
 *)
 type bheap = list node
 
@@ -149,7 +154,9 @@ let extractMin (bh: bheap{Cons? bh}) : int & bheap =
   
 
 (*
-  Lemas de las operaciones de Binomial Heap
+*****************************************************************
+  Lemas de las operaciones de Binomial Heap respecto a su tamaño
+*****************************************************************
 *)
 
 let rec lemma_removeMinTree_size (bh : bheap{Cons? bh})
@@ -231,7 +238,9 @@ let lemma_deleteMin_size (bh: bheap{Cons? bh})
   }
 
 (*
+***********************************************
   Transformaciones de Binomial Heaps a listas
+***********************************************
 *)
 let rec toOrderList (bh: bheap) : Tot (list int) (decreases (number_nodes_list bh))=
   match bh with
@@ -269,7 +278,9 @@ let rec fromList (l: list int) : bheap =
 
 
 (*
+*******************************************************************************
   Relación de permutación entre listas y 'models' entre Binomial Heap y listas
+*******************************************************************************
 *)
 
 let rec count (x:int) (l:list int) : nat =
@@ -803,7 +814,9 @@ let lemma_removeList_perm (x: int) (xs ys: list int)
   lemma_removeList_count x ys; 
   admit()
 (*
+**********************************************************
   Lemas de correctitud de las operaciones Binomial Heap
+**********************************************************
 *)
 val findMin_ok (bh : bheap) (xs : list int{Cons? xs})
   : Lemma (requires models bh xs)
