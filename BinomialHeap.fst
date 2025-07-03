@@ -3,6 +3,7 @@ module BinomialHeap
 open FStar.List.Tot
 open FStar.Math.Lib
 open FStar.Calc
+open FStar.Classical
 
 (*
 *****************************************************************************
@@ -134,14 +135,6 @@ let rec removeMinTree (bh: bheap{Cons? bh}) : (node & bheap)  =
 let findMin (bh: bheap{Cons? bh}) : int =
   let m, _ = removeMinTree bh in root0 m
 
-let rec rev_go #a (acc xs : list a) : Tot (list a) (decreases xs)=
-  match xs with
-  | [] -> acc
-  | x::xs -> rev_go (x::acc) xs
-
-let rev (#a:Type) (xs : list a) : list a =
-  rev_go [] xs
-
 let rec children (n: node) : Tot (list node) (decreases (length (children0 n)))
 = 
   match n with
@@ -166,17 +159,17 @@ let rec lemma_removeMinTree_size (bh : bheap{Cons? bh})
     | [h] -> ()
     | h::hs -> lemma_removeMinTree_size hs
 
-let rec lemma_rev_go_number_nodes (acc ts : list node)
-  : Lemma (ensures number_nodes_list acc + number_nodes_list ts == number_nodes_list (rev_go acc ts))
+let rec lemma_rev_go_number_nodes (ts acc: list node)
+  : Lemma (ensures number_nodes_list ts + number_nodes_list acc == number_nodes_list (rev_acc ts acc))
           (decreases ts)
   =  
     match ts with
      | [] -> ()
-     | t::ts -> lemma_rev_go_number_nodes (t::acc) ts
+     | t::ts' -> lemma_rev_go_number_nodes ts' (t::acc)
 
 let lemma_rev_number_nodes (ts : list node)
   : Lemma (number_nodes_list ts == number_nodes_list (rev ts))
-  = lemma_rev_go_number_nodes [] ts
+  = lemma_rev_go_number_nodes ts []
 
 let rec lemma_insertTree_size (tree: node) (bh: bheap)
   : Lemma (ensures number_nodes_list (insertTree tree bh) == number_nodes tree + number_nodes_list bh)
@@ -251,9 +244,7 @@ let rec toOrderList (bh: bheap) : Tot (list int) (decreases (number_nodes_list b
 
 let rec elems_node0 (n: node0) : list int =
   let N (_, x, c) = n in
-  match c with
-    | [] -> [x]
-    | _ -> x :: elems_nodes c
+  x :: elems_nodes c
 and elems_nodes (cs: list node0) : list int =
   match cs with
     | [] -> []
@@ -311,8 +302,8 @@ let rec lemma_min_in_list xs =
   | x::xs' ->
     lemma_min_in_list xs'
 
-let rec lemma_count_mem (l:list int) : Lemma
-  (ensures forall x. mem x l <==> count x l > 0)
+let rec lemma_count_mem (l:list int) 
+ : Lemma (ensures forall x. mem x l <==> count x l > 0)
 =
   match l with
   | [] -> ()
@@ -320,29 +311,33 @@ let rec lemma_count_mem (l:list int) : Lemma
     lemma_count_mem ys
 
 val lemma_perm_mem : xs:list int -> ys:list int ->
-  Lemma (requires perm xs ys)
+  Lemma (requires xs =~ ys)
         (ensures forall x. mem x xs <==> mem x ys)
 
 let lemma_perm_mem xs ys =
   lemma_count_mem xs;
   lemma_count_mem ys
 
-let rec lemma_min_is_le_all (xs: list int { length xs > 0 }) : Lemma
-  (ensures forall y. mem y xs ==> min_list xs <= y)
+let rec lemma_min_is_le_all (xs: list int { length xs > 0 }) (y : int) : Lemma
+  (ensures mem y xs ==> min_list xs <= y)
 =
   match xs with
   | [x] -> () 
-  | x::xs' -> lemma_min_is_le_all xs'
+  | x::xs' -> lemma_min_is_le_all xs' y
 
 val lemma_min_list_perm (xs : list int{Cons? xs}) (ys : list int)
   : Lemma (requires xs =~ ys)
           (ensures min_list xs == min_list ys)
 let lemma_min_list_perm xs ys =
-  lemma_perm_mem xs ys;
+  let mx = min_list xs in
+  let my = min_list ys in
   lemma_min_in_list xs;
   lemma_min_in_list ys;
-  lemma_min_is_le_all xs;
-  lemma_min_is_le_all ys
+  lemma_perm_mem xs ys;
+  assert (mem mx ys);
+  assert (mem my xs);
+  lemma_min_is_le_all xs my;
+  lemma_min_is_le_all ys mx
   
 
 let rec lemma_min_list_concat (xs ys : clist int)
@@ -352,12 +347,16 @@ let rec lemma_min_list_concat (xs ys : clist int)
     | [x] -> ()
     | x::xs' -> lemma_min_list_concat xs' ys
 
-let rec count_append (l1 l2: list int)
-  : Lemma (forall x. count x (l1 @ l2) == count x l1 + count x l2)
+let rec __count_append (l1 l2: list int) (x:int)
+  : Lemma (count x (l1 @ l2) == count x l1 + count x l2)
 =
   match l1 with
   | [] -> ()
-  | y::ys -> count_append ys l2; ()
+  | y::ys -> __count_append ys l2 x
+
+let count_append (l1 l2: list int)
+  : Lemma (forall x. count x (l1 @ l2) == count x l1 + count x l2)
+= FStar.Classical.forall_intro (__count_append l1 l2)
 
 let perm_comm (l1 l2:list int)
   : Lemma (perm (l1 @ l2) (l2 @ l1)) 
@@ -381,20 +380,18 @@ let rec perm_preappend (l1 l2 l3: list int)
   | [] -> ()
   | x::xs -> perm_preappend xs l2 l3
 
-let rec perm_postappend (l1 l2 l3: list int)
-  : Lemma (requires perm l1 l2)
-          (ensures perm (l1 @ l3) (l2 @ l3))
-=
- match l3 with
-  | [] -> ()
-  | x::xs -> count_append l1 l3; count_append l2 l3; perm_postappend l1 l2 xs
-
 let perm_append (l1 l2 l3 l4: list int)
   : Lemma (requires perm l1 l3 /\ perm l2 l4)
           (ensures perm (l1 @ l2) (l3 @ l4)) 
 =
   count_append l1 l2;
   count_append l3 l4
+
+let perm_postappend (l1 l2 l3: list int)
+  : Lemma (requires perm l1 l2)
+          (ensures perm (l1 @ l3) (l2 @ l3))
+=
+  perm_append l1 l3 l2 l3
 
 let rec append_assoc (l1 l2 l3: list int)
   : Lemma (l1 @ (l2 @ l3) == (l1 @ l2) @ l3) 
@@ -442,13 +439,54 @@ let lemma_node_is_heap0 (n: node) : Lemma
   ))
 = ()
 
-let lemma_root_gt_children (n: node)
+let rec all_le_trans (x y : int) (c : list node0)
+  : Lemma (requires all_le x c /\ y <= x)
+          (ensures  all_le y c)
+= match c with
+    | [] -> ()
+    | c'::cs -> all_le_trans x y cs 
+
+let rec ggg (k : int) (cs : list node0) (x : int)
+  : Lemma (requires all_le k cs /\
+                    mem x (elems_nodes cs))
+          (ensures  k <= x)
+= match cs with
+  | [] -> ()
+  | c :: cs'  ->
+    append_mem (elems_node0 c) (elems_nodes cs') x;
+    if mem x (elems_node0 c) 
+    then (
+      ggg0 k c x
+    ) 
+    else (
+      ggg k cs' x
+    )
+
+and ggg0 (k : int) (c : node0) (x : int)
+  : Lemma (requires all_le0 k c /\ mem x (elems_node0 c))
+          (ensures  k <= x)
+  = let N (_, x', cs) = c in
+    if x <> x' 
+    then (
+      all_le_trans x' k cs; 
+      ggg k cs x
+    )
+
+let __lemma_root_gt_children (n : node) (x:int)
+  : Lemma (ensures (mem x (elems_nodes (children0 n)) ==> root0 n <= x))
+= Classical.move_requires (ggg (root0 n) (children0 n)) x
+
+let lemma_root_gt_children (n : node)
   : Lemma (ensures (forall x. mem x (elems_nodes (children0 n)) ==> root0 n <= x))
-= admit()
+= Classical.forall_intro (__lemma_root_gt_children n)
 
 let lemma_root_gt_min_children (n: node)
   : Lemma (ensures (match children0 n with | [] -> True | cs -> root0 n <= min_list (elems_nodes cs)))
-= admit()
+= match children0 n with
+  | [] -> ()
+  | cs ->
+    lemma_min_in_list (elems_nodes cs);
+    lemma_root_gt_children n
 
 let lemma_min_node_root (n: node)
   : Lemma (ensures min_list (elems_node0 n) == root0 n) 
@@ -546,6 +584,7 @@ let rec lemma_min_removeMintree (bh: bheap{Cons? bh})
                if root0 h < root0 minh
                then lemma_min_node_root h
                else lemma_min_node_root minh
+
 let lemma_link_perm (tree1 tree2: node)
   : Lemma (requires rank0 tree1 = rank0 tree2)
           (ensures perm (elems_node0 (link tree1 tree2)) (elems_node0 tree1 @ elems_node0 tree2))
@@ -695,7 +734,7 @@ let rec lemma_cons_append_perm_int (x: int) (xs ys: list int)
   | _::xs' -> lemma_cons_append_perm_int x xs' ys
 
 let rec lemma_rev_go_perm_int (acc xs: list int)
-  : Lemma (ensures perm (rev_go acc xs) (xs @ acc))
+  : Lemma (ensures perm (rev_acc xs acc) (xs @ acc))
           (decreases xs)
 = match xs with
   | [] -> ()
@@ -705,31 +744,49 @@ let lemma_rev_perm_int (xs: list int)
   : Lemma (ensures perm (rev xs) xs)
 = lemma_rev_go_perm_int [] xs
 
-let rec lemma_cons_perm_node_1 (x: node) (xs: list node)
-  : Lemma (ensures perm (toList (x::xs)) (elems_node0 x @ toList xs))
-= match xs with
+let rec lemma_toList_append (l1 l2: bheap)
+  : Lemma (ensures toList (l1 @ l2) == (toList l1 @ toList l2))
+= match l1 with
+    | [] -> ()
+    | h::hs -> 
+      calc (==) {
+        toList (l1 @ l2);
+        == {}
+        toList ((h::hs) @ l2);
+        == {}
+        elems_node0 h @ toList (hs @ l2);
+        == { lemma_toList_append hs l2 }
+        elems_node0 h @ (toList hs @ toList l2);
+        == { append_assoc (elems_node0 h) (toList hs) (toList l2)}
+        (elems_node0 h @ toList hs) @ toList l2;
+      }
+
+let rec lemma_rev_perm_bheap (bh: bheap)
+  : Lemma (toList (rev bh) =~ toList bh)
+= match bh with
   | [] -> ()
-  | y::ys -> lemma_cons_perm_node_1 x ys
-
-let lemma_cons_perm_node (x: node) (xs: list node)
-  : Lemma (ensures perm (toList (x::xs)) (toList xs @ elems_node0 x))
-= lemma_cons_perm_node_1 x xs; perm_comm (elems_node0 x) (toList xs)
-
-let rec lemma_cons_append_perm_node (x: node) (xs ys: list node)
-  : Lemma (ensures perm (toList (x::xs @ ys)) (toList xs @ toList (x::ys)))
-=
-  match xs with
-  | [] -> lemma_cons_perm_node x ys
-  | _::xs' -> lemma_cons_append_perm_node x xs' ys; admit()
-
-let rec lemma_rev_go_perm_bheap (acc xs: list node)
-  : Lemma (ensures perm (toList (rev_go acc xs)) (toList xs @ toList acc))
-          (decreases xs)
-= admit()
-
-let lemma_rev_perm_bheap (bh: bheap)
-  : Lemma (perm (toList (rev bh)) (toList bh))
-= lemma_rev_go_perm_bheap [] bh
+  | h :: t ->
+    calc (=~) {
+      toList bh;
+      == {}
+      toList (h :: t);
+      == {}
+      elems_node0 h @ toList t;
+      =~ { perm_comm (elems_node0 h) (toList t) }
+      toList t @ elems_node0 h;
+      =~ { lemma_rev_perm_bheap t;
+          perm_postappend (toList t) (toList (rev t)) (elems_node0 h)
+        }
+      toList (rev t) @ elems_node0 h;
+      == {}
+      toList (rev t) @ toList [h];
+      =~ { lemma_toList_append (rev t) [h] }
+      toList (rev t @ [h]);
+      == { rev_append [h] t }
+      toList (rev (h :: t));
+      == {}
+      toList (rev bh);
+    }
 
 let lemma_extractMin_perm (bh: bheap{Cons? bh})
   : Lemma (let minh, rest = removeMinTree bh in
@@ -746,17 +803,17 @@ let lemma_extractMin_perm (bh: bheap{Cons? bh})
   toList (children minh) @ toList rest;
 }
 
-let rec lemma_removeList_count (x: int) (xs: list int)
+let rec lemma_removeList_count_elem_mem (x: int) (xs: list int)
   : Lemma (ensures mem x xs ==> count x (remove_list x xs) == count x xs - 1)
 = match xs with
   | [] -> ()
   | y::ys -> if x = y
              then ()
-             else lemma_removeList_count x ys
+             else lemma_removeList_count_elem_mem x ys
 
 let lemma_removeList_minList (xs: list int{Cons? xs})
   : Lemma (ensures count (min_list xs) (remove_list (min_list xs) xs) == count (min_list xs) xs - 1)
-= lemma_min_in_list xs; lemma_removeList_count (min_list xs) xs
+= lemma_min_in_list xs; lemma_removeList_count_elem_mem (min_list xs) xs
 
 let rec lemma_toList_children_equal (n: node)
   : Lemma (ensures toList (children n) == elems_nodes (children0 n))
@@ -799,20 +856,60 @@ let lemma_removeMinTree_min_perm (bh: bheap{Cons? bh})
            toList (children minh) =~ (remove_list (root0 minh) (elems_node0 minh)))
 = lemma_removeList_perm_node (fst (removeMinTree bh))
 
+let rec __lemma_removeList_count_elems (xs: list int) (x y: int)
+  : Lemma (requires x <> y)
+          (ensures count y xs == count y (remove_list x xs))
+= match xs with
+    | [] -> ()
+    | x'::xs' -> __lemma_removeList_count_elems xs' x y
+
+let lemma_removeList_count_elems (xs : list int) (x: int)
+  : Lemma (forall y. x <> y ==> count y xs == count y (remove_list x xs))
+= FStar.Classical.forall_intro (FStar.Classical.move_requires (__lemma_removeList_count_elems xs x))
+
+let lemma_append_mem (x: int) (xs ys: list int)
+  : Lemma (requires mem x xs)
+          (ensures mem x (xs@ys))
+= append_mem xs ys x
+
 let lemma_removeList_append (x: int) (xs ys: list int)
-  : Lemma (ensures perm ((remove_list x xs) @ ys) (remove_list x (xs @ ys)))
-= count_append (remove_list x xs) ys;
+  : Lemma (requires mem x xs)
+          (ensures perm ((remove_list x xs) @ ys) (remove_list x (xs @ ys)))
+= lemma_removeList_count_elem_mem x xs;
+  lemma_removeList_count_elems xs x;
+  lemma_removeList_count_elems (xs @ ys) x;
+  count_append (remove_list x xs) ys;
   count_append xs ys;
-  lemma_removeList_count x (xs @ ys);
-  admit()
+  lemma_append_mem x xs ys;
+  lemma_removeList_count_elem_mem x (xs @ ys)
+
+let rec lemma_not_mem_count (xs: list int) (x: int)
+  : Lemma (requires ~ (mem x xs))
+          (ensures count x xs == 0)
+= match xs with
+    | [] -> ()
+    | x'::xs' -> lemma_not_mem_count xs' x
+
+let rec lemma_removeList_elem_notmem (xs: list int) (x: int)
+  : Lemma (requires ~ (mem x xs))
+          (ensures remove_list x xs == xs)
+= match xs with
+  | [] -> ()
+  | x'::xs' -> lemma_removeList_elem_notmem xs' x
 
 let lemma_removeList_perm (x: int) (xs ys: list int)
   : Lemma (requires xs =~ ys)
           (ensures remove_list x xs =~ remove_list x ys)
 = lemma_perm_mem xs ys;
-  lemma_removeList_count x xs;
-  lemma_removeList_count x ys; 
-  admit()
+  if mem x xs then (
+    lemma_removeList_count_elem_mem x xs;
+    lemma_removeList_count_elem_mem x ys;
+    lemma_removeList_count_elems xs x;
+    lemma_removeList_count_elems ys x
+  ) else (
+    lemma_removeList_elem_notmem xs x;
+    lemma_removeList_elem_notmem ys x
+  )
 (*
 **********************************************************
   Lemas de correctitud de las operaciones Binomial Heap
