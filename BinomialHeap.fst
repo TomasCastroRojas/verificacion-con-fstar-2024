@@ -12,17 +12,17 @@ open FStar.Classical
 *)
 type node0 = | N of nat & int & list node0 // rank, data, children
 
-let rec all_le0 (x: int) (tree: node0) : Tot bool (decreases %[tree; 0])=
+let rec all_gt0 (x: int) (tree: node0) : Tot bool (decreases %[tree; 0])=
   match tree with
-  | N (r, k, c) -> x <= k && all_le k c
-and all_le (x: int) (bh: list node0) : Tot bool (decreases %[bh; 1])=
+  | N (r, k, c) -> x <= k && all_gt k c
+and all_gt (x: int) (bh: list node0) : Tot bool (decreases %[bh; 1])=
   match bh with
     | [] -> true
-    | h::hs -> all_le0 x h && all_le x hs
+    | h::hs -> all_gt0 x h && all_gt x hs
 
 let rec is_heap0 (tree: node0) : bool =
   match tree with
-  | N (r, k, c) -> all_le0 k tree && is_heap c
+  | N (r, k, c) -> all_gt0 k tree && is_heap c
 and is_heap (bh: list node0) : bool =
   match bh with
     | [] -> true
@@ -439,15 +439,15 @@ let lemma_node_is_heap0 (n: node) : Lemma
   ))
 = ()
 
-let rec all_le_trans (x y : int) (c : list node0)
-  : Lemma (requires all_le x c /\ y <= x)
-          (ensures  all_le y c)
+let rec all_gt_trans (x y : int) (c : list node0)
+  : Lemma (requires all_gt x c /\ y <= x)
+          (ensures  all_gt y c)
 = match c with
     | [] -> ()
-    | c'::cs -> all_le_trans x y cs 
+    | c'::cs -> all_gt_trans x y cs 
 
-let rec ggg (k : int) (cs : list node0) (x : int)
-  : Lemma (requires all_le k cs /\
+let rec all_gt_list_elem_mem (k : int) (cs : list node0) (x : int)
+  : Lemma (requires all_gt k cs /\
                     mem x (elems_nodes cs))
           (ensures  k <= x)
 = match cs with
@@ -456,25 +456,25 @@ let rec ggg (k : int) (cs : list node0) (x : int)
     append_mem (elems_node0 c) (elems_nodes cs') x;
     if mem x (elems_node0 c) 
     then (
-      ggg0 k c x
+      all_gt_list_elem_mem0 k c x
     ) 
     else (
-      ggg k cs' x
+      all_gt_list_elem_mem k cs' x
     )
 
-and ggg0 (k : int) (c : node0) (x : int)
-  : Lemma (requires all_le0 k c /\ mem x (elems_node0 c))
+and all_gt_list_elem_mem0 (k : int) (c : node0) (x : int)
+  : Lemma (requires all_gt0 k c /\ mem x (elems_node0 c))
           (ensures  k <= x)
   = let N (_, x', cs) = c in
     if x <> x' 
     then (
-      all_le_trans x' k cs; 
-      ggg k cs x
+      all_gt_trans x' k cs; 
+      all_gt_list_elem_mem k cs x
     )
 
 let __lemma_root_gt_children (n : node) (x:int)
   : Lemma (ensures (mem x (elems_nodes (children0 n)) ==> root0 n <= x))
-= Classical.move_requires (ggg (root0 n) (children0 n)) x
+= Classical.move_requires (all_gt_list_elem_mem (root0 n) (children0 n)) x
 
 let lemma_root_gt_children (n : node)
   : Lemma (ensures (forall x. mem x (elems_nodes (children0 n)) ==> root0 n <= x))
