@@ -12,14 +12,34 @@ open FStar.Classical
 *)
 type node0 = | N of nat & int & list node0 // rank, data, children
 
-let rec all_gt0 (x: int) (tree: node0) : Tot bool (decreases %[tree; 0])=
+(*
+  Predicado que verifica si todos los elementos de un árbol son mayores que un valor dado.
+  Es decir, que el valor dado es una cota mínima de los elementos del árbol.
+*)
+let rec all_gt0 (x: int) (tree: node0) : Tot bool =
   match tree with
-  | N (r, k, c) -> x <= k && all_gt k c
-and all_gt (x: int) (bh: list node0) : Tot bool (decreases %[bh; 1])=
+  | N (r, k, c) -> x <= k && all_gt x c
+and all_gt (x: int) (bh: list node0) : Tot bool =
   match bh with
     | [] -> true
     | h::hs -> all_gt0 x h && all_gt x hs
 
+let rec all_gt_trans0 (x y:int) (n: node0)
+  : Lemma (requires all_gt0 x n /\ y <= x)
+          (ensures  all_gt0 y n)
+= match n with
+  | N (_, k, cs) -> all_gt_trans x y cs
+and all_gt_trans (x y : int) (c : list node0)
+  : Lemma (requires all_gt x c /\ y <= x)
+          (ensures  all_gt y c)
+= match c with
+    | [] -> ()
+    | c'::cs -> all_gt_trans0 x y c';
+                all_gt_trans x y cs
+
+(*
+  Propiedad de MinHeap. La raíz de todo arbol es menor a todos sus hijos
+*)
 let rec is_heap0 (tree: node0) : bool =
   match tree with
   | N (r, k, c) -> all_gt0 k tree && is_heap c
@@ -40,6 +60,9 @@ let children0 (tree : node0) : list node0 =
   let N (_,_,c) = tree in
   c
 
+(*
+  Nodo de un binomial heap
+*)
 type node = n:node0{is_heap0 n}
 
 let root (tree : node) : int =
@@ -53,6 +76,11 @@ let root (tree : node) : int =
 *)
 let singleton (x: int): node = N (0, x, [])
 
+(*
+  Construye un nuevo arbol a partir de otros dos. Esta operación solo tiene sentido si tienen el mismo rango.
+  De este modo, se aseguran ciertas propiedades de complejidad por definición (por ejemplo, findMin \in O (lg n)). 
+  No se prueban dichas propiedades en este trabajo.
+*)
 let link0 (tree1 : node0) (tree2 : node0{rank0 tree1 = rank0 tree2}) : node0 =
   match tree1, tree2 with
   | N (r, k1, c1), N (_, k2, c2) -> if k1 <= k2
@@ -60,13 +88,10 @@ let link0 (tree1 : node0) (tree2 : node0{rank0 tree1 = rank0 tree2}) : node0 =
                                     else N (r + 1, k2, tree1 :: c2)
 
 let link (tree1 : node) (tree2 : node{rank0 tree1 = rank0 tree2}) : node 
-= link0 tree1 tree2
-
-let rec incr_rank (hs : list node0) : prop =
-  match hs with
-  | [] -> True
-  | [_] -> True
-  | h1::h2::hs' -> rank0 h1 < rank0 h2 /\ incr_rank (h2::hs')
+= match tree1, tree2 with
+  | N (r, k1, c1), N (_, k2, c2) -> if k1 <= k2
+                                    then (all_gt_trans0 k2 k1 tree2; N (r + 1, k1, tree2 :: c1))
+                                    else (all_gt_trans0 k1 k2 tree1; N (r + 1, k2, tree1 :: c2))
 
 let rec number_nodes0 (tree: node0) : nat =
   match tree with
@@ -92,6 +117,18 @@ let number_nodes_list (l: list node) : nat =
   Definición de Binomial Heap y sus operaciones
 *************************************************
 *)
+
+(*
+  Predicado que verifica los rangos de una lista de arboles esta en orden ascendente.
+  Las operaciones estan definidas de modo tal de preservar este predicado si bien 
+  no se verifican propiedades respecto a esto. Por eso no se incluye en el refinamiento del tipo `bheap`
+*)
+let rec incr_rank (hs : list node) : prop =
+  match hs with
+  | [] -> True
+  | [_] -> True
+  | h1::h2::hs' -> rank0 h1 < rank0 h2 /\ incr_rank (h2::hs')
+
 type bheap = list node
 
 let emptyHeap : bheap = []
@@ -235,6 +272,11 @@ let lemma_deleteMin_size (bh: bheap{Cons? bh})
   Transformaciones de Binomial Heaps a listas
 ***********************************************
 *)
+
+(*
+  Construye una lista ordenada de números sacando sucesivamente el mínimo del heap.
+  Podría utilizarse para la relación `models` y verificar propiedades de listas ordenadas respecto a las queues.
+*)
 let rec toOrderList (bh: bheap) : Tot (list int) (decreases (number_nodes_list bh))=
   match bh with
     | [] -> []
@@ -257,11 +299,6 @@ let rec toList (bh: bheap) : Tot (list int)=
 
 let clist t = l : list t {Cons? l}
 
-let rec toListList (bh: bheap) : Tot (list (clist int))=
-  match bh with
-    | [] -> []
-    | h::hs -> elems_node0 h :: toListList hs 
-
 let rec fromList (l: list int) : bheap =
   match l with
     | [] -> []
@@ -279,21 +316,27 @@ let rec count (x:int) (l:list int) : nat =
     | [] -> 0
     | y::l' -> (if x = y then 1 else 0) + count x l'
 
+(*
+  Dos listas son permutaciones si tienen el mismo "contenido" sin importar el orden.
+*)
 let perm (l1 l2: list int) : GTot Type =
   forall (x:int). count x l1 == count x l2
 
+(*
+  Un binomial heap 'modela' una lista si transformandolo a lista contiene la misma información.
+*)
 let models (bh : bheap) (xs : list int) : prop =
   perm (toList bh) xs
 
 let (=~) = perm
 
-val min_list (xs: list int{Cons? xs}) : int
+val min_list (xs: clist int) : int
 let rec min_list xs =
   match xs with
   | [x] -> x
   | x::xs -> min x (min_list xs)
 
-val lemma_min_in_list (xs: list int {Cons? xs}) :
+val lemma_min_in_list (xs: clist int) :
   Lemma (ensures mem (min_list xs) xs)
 
 let rec lemma_min_in_list xs =
@@ -318,14 +361,14 @@ let lemma_perm_mem xs ys =
   lemma_count_mem xs;
   lemma_count_mem ys
 
-let rec lemma_min_is_le_all (xs: list int { length xs > 0 }) (y : int) : Lemma
+let rec lemma_min_is_le_all (xs: clist int) (y : int) : Lemma
   (ensures mem y xs ==> min_list xs <= y)
 =
   match xs with
   | [x] -> () 
   | x::xs' -> lemma_min_is_le_all xs' y
 
-val lemma_min_list_perm (xs : list int{Cons? xs}) (ys : list int)
+val lemma_min_list_perm (xs : clist int) (ys : list int)
   : Lemma (requires xs =~ ys)
           (ensures min_list xs == min_list ys)
 let lemma_min_list_perm xs ys =
@@ -439,13 +482,6 @@ let lemma_node_is_heap0 (n: node) : Lemma
   ))
 = ()
 
-let rec all_gt_trans (x y : int) (c : list node0)
-  : Lemma (requires all_gt x c /\ y <= x)
-          (ensures  all_gt y c)
-= match c with
-    | [] -> ()
-    | c'::cs -> all_gt_trans x y cs 
-
 let rec all_gt_list_elem_mem (k : int) (cs : list node0) (x : int)
   : Lemma (requires all_gt k cs /\
                     mem x (elems_nodes cs))
@@ -468,7 +504,6 @@ and all_gt_list_elem_mem0 (k : int) (c : node0) (x : int)
   = let N (_, x', cs) = c in
     if x <> x' 
     then (
-      all_gt_trans x' k cs; 
       all_gt_list_elem_mem k cs x
     )
 
@@ -915,6 +950,10 @@ let lemma_removeList_perm (x: int) (xs ys: list int)
   Lemas de correctitud de las operaciones Binomial Heap
 **********************************************************
 *)
+
+(*
+  La operación findMin es lo mismo que buscar el mínimo de la lista.
+*)
 val findMin_ok (bh : bheap) (xs : list int{Cons? xs})
   : Lemma (requires models bh xs)
           (ensures findMin bh == min_list xs)
@@ -930,6 +969,9 @@ let findMin_ok bh xs =
     findMin bh;
   }
 
+(*
+  La operación deleteMin es lo mismo que eliminar el mínimo de la lista.
+*)
 val deleteMin_ok (bh : bheap) (xs : list int{Cons? xs})
   : Lemma (requires models bh xs)
           (ensures models (snd (extractMin bh)) (remove_list (min_list xs) xs))
@@ -961,6 +1003,9 @@ let deleteMin_ok bh xs =
     remove_list (min_list xs) xs;
   }
 
+(*
+  La operación insert es lo mismo que agregar un nuevo elemento a la lista.
+*)
 val insert_ok  (bh : bheap) (x : int) (xs : list int)
   : Lemma (requires models bh xs)
           (ensures models (insert x bh) (x::xs))
